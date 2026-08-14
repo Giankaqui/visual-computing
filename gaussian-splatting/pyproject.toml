@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gsplat-pure"
+version = "0.1.0"
+description = "Differentiable 3D Gaussian splatting implemented in pure PyTorch, with EWA projection, a tile-based rasterizer and adaptive density control"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Giancarlo Kaqui Valenzuela" }]
+keywords = ["gaussian-splatting", "differentiable-rendering", "novel-view-synthesis", "pytorch"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics :: 3D Rendering",
+]
+dependencies = [
+    "torch>=2.1",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pillow>=10.0",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "ruff>=0.5"]
+
+[project.scripts]
+gsplat = "gsplat.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gsplat"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["slow: training runs that take a minute or more"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+ignore = ["N803", "N806"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N802"]
