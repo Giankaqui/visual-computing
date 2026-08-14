@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sfm"
+version = "0.1.0"
+description = "Incremental structure from motion with a five-point solver and Schur-complement bundle adjustment"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Giancarlo Kaqui Valenzuela" }]
+keywords = ["structure-from-motion", "multiple-view-geometry", "bundle-adjustment", "computer-vision"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "opencv-python>=4.8",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "ruff>=0.5"]
+
+[project.scripts]
+sfm = "sfm.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sfm"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["slow: end-to-end runs that take a few seconds"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+ignore = ["N803", "N806"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N802"]
