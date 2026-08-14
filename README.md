@@ -11,6 +11,13 @@ tests, benchmarks and documentation.
 | [gaussian-splatting](gaussian-splatting) | Fits a 3D scene to posed images and renders novel views | EWA projection, differentiable tile rasterizer, adaptive density control |
 | [gradient-domain](gradient-domain) | Composites, flattens and tone maps images | Poisson integration with a geometric multigrid solver |
 
+An [interactive demo](interactive-demo) drives all three from the browser, with
+the sliders wired to the same library code the command line calls.
+
+```bash
+python interactive-demo/app.py
+```
+
 The first two compose. Structure from motion writes `cameras.json` and
 `points.ply`; the splatting trainer reads exactly those and initializes from
 them, which is the same handover a production pipeline performs between a sparse

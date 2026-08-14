@@ -1,0 +1,13 @@
+line-length = 100
+
+[lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+# Gradio layouts nest containers to express the layout itself, so collapsing a
+# column and the row inside it into one `with` hides the structure the code is
+# describing.
+ignore = [
+    "SIM117",
+    # Rotation matrices are capital R throughout the three packages; renaming
+    # them here would break the correspondence with the code being demonstrated.
+    "N806",
+]

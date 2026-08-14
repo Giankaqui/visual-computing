@@ -47,3 +47,26 @@ jobs:
       - name: Test
         working-directory: ${{ matrix.project }}
         run: pytest -q
+
+  demo:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff
+
+      # The demonstration app has no tests of its own: it is a thin layer over
+      # three packages that are tested separately, and everything it shows is a
+      # live computation rather than a fixture that could go stale.
+      - name: Lint
+        working-directory: interactive-demo
+        run: ruff check .

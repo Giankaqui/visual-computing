@@ -15,6 +15,9 @@ runs/
 *.ply
 *.hdr
 *.npz
+# The trained checkpoint is small and is what makes the interactive demo
+# work straight after a clone, so it is the one archive that is tracked.
+!gaussian-splatting/docs/model.npz
 
 .DS_Store
 .idea/
