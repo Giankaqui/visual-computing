@@ -1,0 +1,238 @@
+{
+  "direct": [
+    {
+      "method": "direct",
+      "shape": [
+        63,
+        63
+      ],
+      "unknowns": 3969,
+      "seconds": 0.00627374998293817,
+      "iterations": 0,
+      "relative_residual": 3.7306316911364157e-16,
+      "max_error": 4.440892098500626e-15
+    },
+    {
+      "method": "direct",
+      "shape": [
+        127,
+        127
+      ],
+      "unknowns": 16129,
+      "seconds": 0.02506004204042256,
+      "iterations": 0,
+      "relative_residual": 4.00399771125657e-16,
+      "max_error": 1.7430501486614958e-14
+    },
+    {
+      "method": "direct",
+      "shape": [
+        255,
+        255
+      ],
+      "unknowns": 65025,
+      "seconds": 0.13903079088777304,
+      "iterations": 0,
+      "relative_residual": 4.1660373124005564e-16,
+      "max_error": 2.6423307986078726e-14
+    },
+    {
+      "method": "direct",
+      "shape": [
+        511,
+        511
+      ],
+      "unknowns": 261121,
+      "seconds": 0.8918695831671357,
+      "iterations": 0,
+      "relative_residual": 4.391119840212502e-16,
+      "max_error": 1.1612932837579137e-13
+    }
+  ],
+  "cg": [
+    {
+      "method": "cg",
+      "shape": [
+        63,
+        63
+      ],
+      "unknowns": 3969,
+      "seconds": 0.006777500035241246,
+      "iterations": 174,
+      "relative_residual": 9.933856338570258e-09,
+      "max_error": 1.5905523254033938e-07
+    },
+    {
+      "method": "cg",
+      "shape": [
+        127,
+        127
+      ],
+      "unknowns": 16129,
+      "seconds": 0.05316233285702765,
+      "iterations": 332,
+      "relative_residual": 9.375631288248216e-09,
+      "max_error": 2.7386369960691326e-07
+    },
+    {
+      "method": "cg",
+      "shape": [
+        255,
+        255
+      ],
+      "unknowns": 65025,
+      "seconds": 0.16742970794439316,
+      "iterations": 507,
+      "relative_residual": 9.617758101596475e-09,
+      "max_error": 4.141294102089077e-06
+    },
+    {
+      "method": "cg",
+      "shape": [
+        511,
+        511
+      ],
+      "unknowns": 261121,
+      "seconds": 2.4504944591317326,
+      "iterations": 994,
+      "relative_residual": 9.997412515912893e-09,
+      "max_error": 1.6324587302829485e-05
+    },
+    {
+      "method": "cg",
+      "shape": [
+        1023,
+        1023
+      ],
+      "unknowns": 1046529,
+      "seconds": 24.22958324989304,
+      "iterations": 1866,
+      "relative_residual": 9.946654166483818e-09,
+      "max_error": 2.509547842355353e-05
+    }
+  ],
+  "multigrid": [
+    {
+      "method": "multigrid",
+      "shape": [
+        63,
+        63
+      ],
+      "unknowns": 3969,
+      "seconds": 0.023786166915670037,
+      "iterations": 6,
+      "relative_residual": 8.811394541005524e-10,
+      "max_error": 3.6073632081468077e-08
+    },
+    {
+      "method": "multigrid",
+      "shape": [
+        127,
+        127
+      ],
+      "unknowns": 16129,
+      "seconds": 0.019519583089277148,
+      "iterations": 6,
+      "relative_residual": 6.343899353292044e-10,
+      "max_error": 4.6589963886845e-08
+    },
+    {
+      "method": "multigrid",
+      "shape": [
+        255,
+        255
+      ],
+      "unknowns": 65025,
+      "seconds": 0.028493624879047275,
+      "iterations": 5,
+      "relative_residual": 5.519912282999041e-09,
+      "max_error": 8.989121709213066e-07
+    },
+    {
+      "method": "multigrid",
+      "shape": [
+        511,
+        511
+      ],
+      "unknowns": 261121,
+      "seconds": 0.104910499881953,
+      "iterations": 5,
+      "relative_residual": 4.179259770648667e-09,
+      "max_error": 9.088931796075173e-07
+    },
+    {
+      "method": "multigrid",
+      "shape": [
+        1023,
+        1023
+      ],
+      "unknowns": 1046529,
+      "seconds": 0.48739033308811486,
+      "iterations": 5,
+      "relative_residual": 4.068194085260618e-09,
+      "max_error": 9.236068641005346e-07
+    }
+  ],
+  "mgcg": [
+    {
+      "method": "mgcg",
+      "shape": [
+        63,
+        63
+      ],
+      "unknowns": 3969,
+      "seconds": 0.01683454099111259,
+      "iterations": 7,
+      "relative_residual": 2.51003339107614e-09,
+      "max_error": 7.641966726090743e-09
+    },
+    {
+      "method": "mgcg",
+      "shape": [
+        127,
+        127
+      ],
+      "unknowns": 16129,
+      "seconds": 0.019981749821454287,
+      "iterations": 7,
+      "relative_residual": 2.538561759804136e-09,
+      "max_error": 1.0163259234197142e-08
+    },
+    {
+      "method": "mgcg",
+      "shape": [
+        255,
+        255
+      ],
+      "unknowns": 65025,
+      "seconds": 0.0339697920717299,
+      "iterations": 7,
+      "relative_residual": 2.0651323592699304e-09,
+      "max_error": 1.0663562144408445e-08
+    },
+    {
+      "method": "mgcg",
+      "shape": [
+        511,
+        511
+      ],
+      "unknowns": 261121,
+      "seconds": 0.10350812505930662,
+      "iterations": 7,
+      "relative_residual": 1.956289940754668e-09,
+      "max_error": 1.0900495395205212e-08
+    },
+    {
+      "method": "mgcg",
+      "shape": [
+        1023,
+        1023
+      ],
+      "unknowns": 1046529,
+      "seconds": 0.4586861659772694,
+      "iterations": 7,
+      "relative_residual": 1.9602381377234714e-09,
+      "max_error": 1.2228929091584462e-08
+    }
+  ]
+}
