@@ -78,8 +78,10 @@ iterations to reach a relative residual of `1e-8` and multigrid-preconditioned
 CG needs 7, a factor of 53 in wall-clock time.
 [Details](gradient-domain#scaling)
 
-**Gaussian splatting.** See the project README for held-out PSNR and SSIM on the
-procedural benchmark scene. [Details](gaussian-splatting#results)
+**Gaussian splatting.** Forty views of a ray-traced scene at 200 x 150, starting
+from ten thousand randomly placed primitives and no point cloud: 24.23 dB and
+0.907 SSIM on held-out views, half a decibel below the training views.
+[Details](gaussian-splatting#results)
 
 ## Conventions shared across the projects
 

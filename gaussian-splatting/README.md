@@ -6,6 +6,11 @@ PyTorch: the EWA projection, the tile-based rasterizer, the spherical harmonic
 colour model and the adaptive density control are all here, and the backward
 pass comes from autograd rather than from a hand-written CUDA kernel.
 
+![Novel views and their depth](docs/turntable.png)
+
+*Novel viewpoints, interleaved between the training cameras, with the
+alpha-weighted depth below each.*
+
 ## How it works
 
 A primitive is a 3D Gaussian with a mean, an anisotropic covariance, an opacity
@@ -141,14 +146,35 @@ Forty training views on an orbit, eight held-out views interleaved half a step
 between them, at 200 × 150. The model starts from 10 000 primitives placed
 uniformly in a ball, with no point cloud to initialize from.
 
-Held-out quality, the primitive count and the figures below all come from a
-single run of the command that follows; it writes `training.png`,
-`comparison.png` and `turntable.png` next to the checkpoint.
+| | PSNR | SSIM |
+| --- | ---: | ---: |
+| Training views (40) | 24.74 dB | 0.9280 |
+| Held-out views (8) | **24.23 dB** | **0.9072** |
+
+30 950 primitives after 3 500 iterations, 1 237 seconds on Metal.
+
+The half-decibel gap between the two rows is the number to look at. It says the
+model is representing the scene rather than memorizing the forty images it was
+shown, which is exactly what the earlier configuration failed to do.
+
+![Training curves](docs/training.png)
+
+Held-out quality rises monotonically throughout. The primitive count drops from
+10 000 to 4 833 on the first pruning pass, which removes the random
+initialization that explains nothing, then grows under densification until the
+window closes at iteration 2 100 and freezes at 30 950.
+
+![Reference, render and error](docs/comparison.png)
+
+The residual error concentrates in two places: object silhouettes, where a
+finite number of Gaussians cannot produce a step edge, and the far floor at
+grazing incidence, where a pixel covers a large and foreshortened patch of
+texture.
 
 Reproduce with
 
 ```bash
-gsplat train --scene synthetic --iterations 6000 --width 200 --height 150 \
+gsplat train --scene synthetic --iterations 3500 --width 200 --height 150 \
              --init random --random-points 10000 --output out/
 ```
 
