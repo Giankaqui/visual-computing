@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - structure-from-motion
+          - gaussian-splatting
+          - gradient-domain
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        working-directory: ${{ matrix.project }}
+        run: |
+          python -m pip install --upgrade pip
+          # The default PyTorch wheel pulls the CUDA runtime, which is several
+          # gigabytes that a CPU runner never uses.
+          if [ "${{ matrix.project }}" = "gaussian-splatting" ]; then
+            python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          fi
+          python -m pip install -e ".[dev]"
+
+      - name: Lint
+        working-directory: ${{ matrix.project }}
+        run: ruff check .
+
+      - name: Test
+        working-directory: ${{ matrix.project }}
+        run: pytest -q
