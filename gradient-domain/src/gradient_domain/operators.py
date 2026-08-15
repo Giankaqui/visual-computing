@@ -1,22 +1,22 @@
-"""Discrete differential operators on a regular grid.
+"""Operadores diferenciales discretos sobre una malla regular.
 
-Every application in this package reduces to the same statement: given a target
-gradient field ``v`` that is not necessarily integrable, find the image whose
-gradient is closest to it in the least-squares sense.  The normal equations of
-that problem are the Poisson equation
+Toda aplicación de este paquete se reduce al mismo enunciado: dado un campo de
+gradiente objetivo ``v`` que no tiene por qué ser integrable, encontrar la imagen
+cuyo gradiente más se le acerca en el sentido de mínimos cuadrados.  Las
+ecuaciones normales de ese problema son la ecuación de Poisson
 
 .. math::
 
     \\nabla^2 u = \\nabla \\cdot v,
 
-so the operators below are the only ones needed: a forward-difference gradient
-to build guidance fields, its negative adjoint as the divergence, and the
-five-point Laplacian that results from composing them.
+así que los operadores de abajo son los únicos que hacen falta: un gradiente por
+diferencias hacia delante para construir campos guía, su adjunto negativo como
+divergencia, y el laplaciano de cinco puntos que resulta de componerlos.
 
-Using the adjoint pair rather than two independently chosen stencils is what
-makes the discrete problem symmetric.  A symmetric system is what lets conjugate
-gradients and multigrid apply at all, and it is why the divergence uses backward
-differences when the gradient uses forward ones.
+Usar el par adjunto en lugar de dos plantillas elegidas por separado es lo que
+hace simétrico al problema discreto.  Un sistema simétrico es lo que permite
+aplicar gradiente conjugado y multigrid, y es la razón de que la divergencia use
+diferencias hacia atrás cuando el gradiente usa las de hacia delante.
 """
 
 from __future__ import annotations
@@ -28,19 +28,20 @@ __all__ = ["gradient", "divergence", "laplacian", "sparse_laplacian", "fold_boun
 
 
 def gradient(image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Forward differences along both axes.
+    """Diferencias hacia delante en ambos ejes.
 
-    The last row and column are set to zero, which is the Neumann condition that
-    makes the operator's adjoint exactly :func:`divergence`.
+    La última fila y la última columna se ponen a cero, que es la condición de
+    Neumann que hace que el adjunto del operador sea exactamente
+    :func:`divergence`.
 
     Parameters
     ----------
-    image : ndarray, shape (h, w) or (h, w, c)
+    image : ndarray, shape (h, w) o (h, w, c)
 
     Returns
     -------
     gx, gy : ndarray
-        Horizontal and vertical derivatives, same shape as the input.
+        Derivadas horizontal y vertical, con la misma forma que la entrada.
     """
     gx = np.zeros_like(image, dtype=float)
     gy = np.zeros_like(image, dtype=float)
@@ -50,24 +51,24 @@ def gradient(image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def divergence(gx: np.ndarray, gy: np.ndarray) -> np.ndarray:
-    """Negative adjoint of :func:`gradient`.
+    """Adjunto negativo de :func:`gradient`.
 
-    The last row and column of the input are ignored, because the gradient never
-    writes there and the adjoint must therefore not read from there.  Making the
-    relation exact for arbitrary fields, rather than only for fields that came
-    out of :func:`gradient`, is what keeps the composition symmetric when a
-    guidance field is built by an operation that does not preserve that
-    structure.
+    La última fila y la última columna de la entrada se ignoran, porque el
+    gradiente nunca escribe ahí y por tanto el adjunto no debe leer de ahí.  Que
+    la relación sea exacta para campos arbitrarios, y no solo para los que salen
+    de :func:`gradient`, es lo que mantiene simétrica la composición cuando un
+    campo guía se construye con una operación que no preserva esa estructura.
 
     Parameters
     ----------
-    gx, gy : ndarray, shape (h, w) or (h, w, c)
+    gx, gy : ndarray, shape (h, w) o (h, w, c)
 
     Returns
     -------
     ndarray
-        Same shape as the inputs; ``divergence(*gradient(u))`` is the five-point
-        Laplacian of ``u`` under homogeneous Neumann conditions.
+        Misma forma que las entradas; ``divergence(*gradient(u))`` es el
+        laplaciano de cinco puntos de ``u`` bajo condiciones de Neumann
+        homogéneas.
     """
     dx = np.zeros_like(gx, dtype=float)
     dy = np.zeros_like(gy, dtype=float)
@@ -83,21 +84,21 @@ def divergence(gx: np.ndarray, gy: np.ndarray) -> np.ndarray:
 
 
 def laplacian(u: np.ndarray, spacing: float = 1.0) -> np.ndarray:
-    """Five-point Laplacian with homogeneous Dirichlet conditions.
+    """Laplaciano de cinco puntos con condiciones de Dirichlet homogéneas.
 
-    Values outside the array are treated as zero, so this is the operator of the
-    interior system produced by :func:`fold_boundary`.
+    Los valores fuera del array se tratan como cero, así que este es el operador
+    del sistema interior que produce :func:`fold_boundary`.
 
     Parameters
     ----------
-    u : ndarray, shape (m, n) or (m, n, c)
+    u : ndarray, shape (m, n) o (m, n, c)
     spacing : float
-        Grid spacing ``h``; the operator scales as ``1 / h ** 2``.
+        Paso de malla ``h``; el operador escala como ``1 / h ** 2``.
 
     Returns
     -------
     ndarray
-        Same shape as ``u``.
+        Misma forma que ``u``.
     """
     padded = np.pad(u, ((1, 1), (1, 1)) + ((0, 0),) * (u.ndim - 2))
     neighbours = (
@@ -107,18 +108,18 @@ def laplacian(u: np.ndarray, spacing: float = 1.0) -> np.ndarray:
 
 
 def sparse_laplacian(shape: tuple[int, int], spacing: float = 1.0) -> sp.csr_matrix:
-    """Assemble the five-point Laplacian of :func:`laplacian` as a sparse matrix.
+    """Ensambla como matriz dispersa el laplaciano de cinco puntos de :func:`laplacian`.
 
     Parameters
     ----------
     shape : tuple of int
-        Interior grid size ``(m, n)``.
+        Tamaño de la malla interior ``(m, n)``.
     spacing : float
 
     Returns
     -------
     scipy.sparse.csr_matrix, shape (m * n, m * n)
-        Symmetric negative definite, in row-major (C) ordering.
+        Simétrica definida negativa, en orden por filas (C).
     """
     rows, cols = shape
 
@@ -138,26 +139,26 @@ def sparse_laplacian(shape: tuple[int, int], spacing: float = 1.0) -> sp.csr_mat
 def fold_boundary(
     right_hand_side: np.ndarray, boundary: np.ndarray, spacing: float = 1.0
 ) -> np.ndarray:
-    """Move known Dirichlet values from the operator to the right-hand side.
+    """Traslada los valores de Dirichlet conocidos del operador al término independiente.
 
-    The unknowns are the interior of ``boundary``; its one-pixel ring holds the
-    prescribed values.  Every interior pixel adjacent to the ring loses one
-    neighbour from the stencil, and the corresponding term moves to the
-    right-hand side with the opposite sign.
+    Las incógnitas son el interior de ``boundary``; su anillo de un píxel guarda
+    los valores prescritos.  Cada píxel interior contiguo al anillo pierde un
+    vecino de la plantilla, y el término correspondiente pasa al término
+    independiente con el signo cambiado.
 
     Parameters
     ----------
-    right_hand_side : ndarray, shape (h - 2, w - 2) or (h - 2, w - 2, c)
-        Divergence of the guidance field on the interior.
-    boundary : ndarray, shape (h, w) or (h, w, c)
-        Image whose border supplies the boundary values.
+    right_hand_side : ndarray, shape (h - 2, w - 2) o (h - 2, w - 2, c)
+        Divergencia del campo guía sobre el interior.
+    boundary : ndarray, shape (h, w) o (h, w, c)
+        Imagen cuyo borde aporta los valores de contorno.
     spacing : float
-        Grid spacing, matching the one used by the operator.
+        Paso de malla, el mismo que use el operador.
 
     Returns
     -------
     ndarray
-        Same shape as ``right_hand_side``.
+        Misma forma que ``right_hand_side``.
     """
     folded = np.array(right_hand_side, dtype=float, copy=True)
     weight = 1.0 / (spacing * spacing)

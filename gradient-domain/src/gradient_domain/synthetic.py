@@ -1,10 +1,11 @@
-"""Procedural test images.
+"""Imágenes de prueba procedurales.
 
-Gradient-domain methods are easiest to judge on images with the properties they
-are designed for: a destination with slowly varying illumination, a source lit
-differently from it, texture that is separable from structure, and a radiance map
-whose dynamic range genuinely exceeds a display.  Generating them procedurally
-keeps the demonstrations reproducible and the repository free of binary assets.
+Los métodos de dominio del gradiente se juzgan mejor sobre imágenes con las
+propiedades para las que están pensados: un destino con iluminación que varía
+despacio, una fuente iluminada de otra manera, textura separable de la
+estructura, y un mapa de radiancia cuyo rango dinámico supere de verdad al de una
+pantalla.  Generarlas proceduralmente mantiene las demostraciones reproducibles y
+el repositorio libre de ficheros binarios.
 """
 
 from __future__ import annotations
@@ -42,22 +43,22 @@ def value_noise(
     base: int = 4,
     persistence: float = 0.5,
 ) -> np.ndarray:
-    """Fractal value noise in ``[0, 1]``.
+    """Ruido de valor fractal en ``[0, 1]``.
 
-    Each octave is a random grid at twice the previous frequency, interpolated up
-    and added with half the amplitude, which gives the roughly ``1 / f`` spectrum
-    that natural texture has.
+    Cada octava es una malla aleatoria al doble de frecuencia que la anterior,
+    interpolada hacia arriba y sumada con la mitad de amplitud, lo que da el
+    espectro aproximadamente ``1 / f`` que tiene la textura natural.
 
     Parameters
     ----------
     shape : tuple of int
     rng : numpy.random.Generator
     octaves : int
-        Number of frequency bands.
+        Número de bandas de frecuencia.
     base : int
-        Resolution of the coarsest band.
+        Resolución de la banda más gruesa.
     persistence : float
-        Amplitude ratio between consecutive bands.
+        Razón de amplitud entre bandas consecutivas.
 
     Returns
     -------
@@ -76,7 +77,7 @@ def value_noise(
 
 @dataclass
 class CompositingExample:
-    """A destination image, a source patch and the selection to transfer.
+    """Una imagen de destino, un recorte de fuente y la selección a transferir.
 
     Attributes
     ----------
@@ -84,7 +85,7 @@ class CompositingExample:
     source : ndarray, shape (sh, sw, 3)
     mask : ndarray of bool, shape (sh, sw)
     offset : tuple of int
-        Where the patch's top-left corner sits in the target.
+        Dónde cae la esquina superior izquierda del recorte en el destino.
     """
 
     target: np.ndarray
@@ -93,7 +94,7 @@ class CompositingExample:
     offset: tuple[int, int]
 
     def naive_composite(self) -> np.ndarray:
-        """Copy the selected pixels straight into the target, seam and all."""
+        """Copia los píxeles seleccionados tal cual en el destino, con costura y todo."""
         row, column = self.offset
         height, width = self.source.shape[:2]
         result = self.target.copy()
@@ -105,7 +106,7 @@ class CompositingExample:
 
 
 def _sky(shape: tuple[int, int], rng: np.random.Generator) -> np.ndarray:
-    """A dusk gradient with soft cloud banding."""
+    """Un degradado de atardecer con bandas suaves de nubes."""
     height, width = shape
     vertical = np.linspace(0.0, 1.0, height)[:, None]
     zenith = np.array([0.16, 0.28, 0.52])
@@ -122,12 +123,13 @@ def _sky(shape: tuple[int, int], rng: np.random.Generator) -> np.ndarray:
 def make_compositing_example(
     shape: tuple[int, int] = (384, 576), seed: int = 0
 ) -> CompositingExample:
-    """Build a dusk landscape and a balloon photographed under a brighter sky.
+    """Construye un paisaje de atardecer y un globo fotografiado bajo un cielo más claro.
 
-    The two images differ by a global illumination offset and a colour cast,
-    which is exactly the situation where copying pixels fails and copying
-    gradients works: the offset lives entirely in the boundary condition and is
-    therefore replaced by the destination's own.
+    Las dos imágenes se diferencian en un desplazamiento global de iluminación y
+    una dominante de color, que es exactamente la situación en la que copiar
+    píxeles falla y copiar gradientes funciona: el desplazamiento vive por
+    completo en la condición de contorno y por tanto lo sustituye el propio
+    desplazamiento del destino.
     """
     rng = np.random.default_rng(seed)
     height, width = shape
@@ -159,16 +161,18 @@ def make_compositing_example(
     px, py = np.meshgrid(grid, grid)
     radius = np.sqrt(px**2 + py**2)
 
-    # The selection is a disc noticeably larger than the balloon, so the seam
-    # runs through the source's own sky rather than across the object.  That is
-    # the condition under which gradient-domain compositing behaves: the
-    # boundary must lie where source and destination are plausibly similar,
-    # because everything that differs between them is absorbed there.
+    # La selección es un disco bastante mayor que el globo, así que la costura
+    # pasa por el propio cielo de la fuente y no por encima del objeto.  Esa es
+    # la condición bajo la que la composición en el dominio del gradiente se
+    # porta bien: la frontera tiene que caer donde fuente y destino sean
+    # verosímilmente parecidos, porque todo lo que difiere entre ambos se absorbe
+    # ahí.
     balloon_radius = 0.58
     mask = radius <= 0.94
 
-    # The balloon is lit from the upper left and painted with radial stripes, so
-    # it carries both a smooth shading ramp and hard chromatic edges.
+    # El globo está iluminado desde arriba a la izquierda y pintado con franjas
+    # radiales, así que lleva a la vez una rampa suave de sombreado y bordes
+    # cromáticos duros.
     stripes = (np.floor((np.arctan2(py, px) + np.pi) / (np.pi / 5.0)).astype(int)) % 2
     base_colors = np.where(
         stripes[..., None] == 0, np.array([0.90, 0.24, 0.20]), np.array([0.96, 0.86, 0.30])
@@ -180,8 +184,8 @@ def make_compositing_example(
     )
     source = base_colors * shading[..., None]
 
-    # The patch was "photographed" against a bright noon sky, one stop brighter
-    # and much cooler than the destination.
+    # El recorte se "fotografió" contra un cielo de mediodía brillante, un paso
+    # más luminoso y mucho más frío que el destino.
     source = source * 1.9 * np.array([0.92, 0.96, 1.06])
     background = np.array([0.62, 0.78, 0.98]) * (
         0.85 + 0.15 * value_noise((patch_size, patch_size), rng, octaves=3, base=2)[..., None]
@@ -200,13 +204,13 @@ def make_compositing_example(
 def make_texture_example(
     shape: tuple[int, int] = (320, 320), seed: int = 1
 ) -> tuple[np.ndarray, np.ndarray]:
-    """A shape with strong texture, and the edge map that defines its structure.
+    """Una forma con textura marcada, y el mapa de bordes que define su estructura.
 
     Returns
     -------
     image : ndarray, shape (h, w, 3)
     edges : ndarray of float, shape (h, w)
-        One on the edges that should survive flattening, zero elsewhere.
+        Uno en los bordes que deben sobrevivir al aplanado, cero en el resto.
     """
     rng = np.random.default_rng(seed)
     height, width = shape
@@ -228,8 +232,8 @@ def make_texture_example(
         np.array([0.30, 0.62, 0.48]) * (0.7 + 0.6 * texture[..., None])
     )[disc & band]
 
-    # Structural edges are the boundaries between the three regions, dilated by
-    # one pixel so that the gradient straddling each boundary is preserved.
+    # Los bordes estructurales son las fronteras entre las tres regiones,
+    # dilatadas un píxel para preservar el gradiente que cruza cada frontera.
     labels = disc.astype(int) + (disc & band).astype(int)
     padded = np.pad(labels, 1, mode="edge")
     edges = np.zeros(shape)
@@ -244,16 +248,16 @@ def make_texture_example(
 def make_radiance_map(
     shape: tuple[int, int] = (320, 448), seed: int = 2
 ) -> np.ndarray:
-    """An interior with a bright window, spanning about five orders of magnitude.
+    """Un interior con una ventana luminosa, con unos cinco órdenes de magnitud.
 
-    The window is four decades brighter than the wall it is set into, and the
-    wall itself carries texture that is invisible under any global tone curve
-    that keeps the window from clipping.
+    La ventana es cuatro décadas más brillante que la pared en la que está
+    encajada, y la pared misma lleva una textura invisible bajo cualquier curva
+    tonal global que evite que la ventana sature.
 
     Returns
     -------
     ndarray, shape (h, w, 3)
-        Linear radiance, strictly positive.
+        Radiancia lineal, estrictamente positiva.
     """
     rng = np.random.default_rng(seed)
     height, width = shape
@@ -262,12 +266,12 @@ def make_radiance_map(
     plaster = 0.6 + 0.8 * value_noise(shape, rng, octaves=6, base=5)
     radiance = 0.9 * plaster[..., None] * np.array([0.55, 0.50, 0.44])
 
-    # A wooden floor in the lower fifth, darker still.
+    # Un suelo de madera en el quinto inferior, todavía más oscuro.
     floor = rows > 0.80 * height
     planks = 0.5 + 0.5 * np.sin(columns * 0.35 + 3.0 * value_noise(shape, rng, octaves=3, base=4))
     radiance[floor] = (0.25 * planks[..., None] * np.array([0.42, 0.28, 0.18]))[floor]
 
-    # A framed window onto a sunlit exterior.
+    # Una ventana enmarcada hacia un exterior soleado.
     window = (
         (columns > 0.52 * width)
         & (columns < 0.88 * width)
@@ -292,7 +296,7 @@ def make_radiance_map(
     )
     radiance[window] = outside[window]
 
-    # A mullion crossing the window, and a small lamp in the dark corner.
+    # Un parteluz cruzando la ventana y una lamparita en la esquina oscura.
     mullion = window & (np.abs(columns - 0.70 * width) < 0.006 * width)
     radiance[mullion] = (5.0 * np.array([0.30, 0.24, 0.18]))[None, :]
 
@@ -300,7 +304,7 @@ def make_radiance_map(
     glow = np.exp(-((lamp_radius / (0.05 * width)) ** 2))
     radiance += (60.0 * glow)[..., None] * np.array([1.0, 0.86, 0.62])
 
-    # A small ambient term stands in for interreflection.  Without it the
-    # darkest pixels are numerically zero, which would make the dynamic range a
-    # property of the floating point format rather than of the scene.
+    # Un pequeño término ambiental hace de interreflexión.  Sin él los píxeles
+    # más oscuros son numéricamente cero, lo que haría del rango dinámico una
+    # propiedad del formato de coma flotante y no de la escena.
     return radiance + 0.02

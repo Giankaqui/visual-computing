@@ -1,6 +1,6 @@
-"""Figures for the demonstrations and the solver benchmark.
+"""Figuras para las demostraciones y para el benchmark de solvers.
 
-Rendering uses the Agg backend so the module works headless.
+El dibujado usa el backend Agg para que el módulo funcione sin pantalla.
 """
 
 from __future__ import annotations
@@ -31,22 +31,22 @@ def _show(axis, image: np.ndarray, title: str) -> None:
 def panel_figure(
     panels: list[tuple[str, np.ndarray]], path: str | Path, columns: int | None = None
 ) -> Path:
-    """Lay out labelled images in a grid.
+    """Coloca imágenes etiquetadas en una rejilla.
 
     Parameters
     ----------
     panels : list of tuple
-        ``(title, image)`` pairs; images may be grayscale or RGB.
-    path : str or Path
-    columns : int or None
-        Grid width; defaults to the number of panels, capped at four.
+        Pares ``(título, imagen)``; las imágenes pueden ser en gris o RGB.
+    path : str o Path
+    columns : int o None
+        Ancho de la rejilla; por defecto el número de paneles, con tope en cuatro.
 
     Returns
     -------
     Path
     """
     if not panels:
-        raise ValueError("at least one panel is required")
+        raise ValueError("hace falta al menos un panel")
     columns = columns or min(len(panels), 4)
     rows = (len(panels) + columns - 1) // columns
 
@@ -68,17 +68,17 @@ def panel_figure(
 
 
 def solver_scaling_figure(results: dict[str, list[dict]], path: str | Path) -> Path:
-    """Plot solver time and iteration count against the number of unknowns.
+    """Dibuja tiempo y número de iteraciones frente al número de incógnitas.
 
-    Reference slopes for linear and quadratic growth are drawn so the measured
-    curves can be read against them directly.
+    Se trazan pendientes de referencia para crecimiento lineal y cuadrático, de
+    modo que las curvas medidas se puedan leer directamente contra ellas.
 
     Parameters
     ----------
     results : dict
-        Maps a solver name to a list of records with keys ``unknowns``,
-        ``seconds`` and ``iterations``.
-    path : str or Path
+        Asocia cada nombre de solver con una lista de registros con claves
+        ``unknowns``, ``seconds`` e ``iterations``.
+    path : str o Path
 
     Returns
     -------
@@ -100,7 +100,7 @@ def solver_scaling_figure(results: dict[str, list[dict]], path: str | Path) -> P
     anchor = min(
         records[0]["seconds"] for records in results.values() if records
     ) / reference[0]
-    axes[0].loglog(reference, anchor * reference, "--", color="0.5", linewidth=1, label="linear")
+    axes[0].loglog(reference, anchor * reference, "--", color="0.5", linewidth=1, label="lineal")
     axes[0].loglog(
         reference,
         anchor * reference[0] * (reference / reference[0]) ** 1.5,
@@ -110,13 +110,13 @@ def solver_scaling_figure(results: dict[str, list[dict]], path: str | Path) -> P
         label="N^1.5",
     )
 
-    axes[0].set_xlabel("unknowns")
-    axes[0].set_ylabel("seconds")
-    axes[0].set_title("time to a relative residual of 1e-8")
+    axes[0].set_xlabel("incógnitas")
+    axes[0].set_ylabel("segundos")
+    axes[0].set_title("tiempo hasta un residuo relativo de 1e-8")
     axes[0].legend()
-    axes[1].set_xlabel("unknowns")
-    axes[1].set_ylabel("iterations")
-    axes[1].set_title("iterations to converge")
+    axes[1].set_xlabel("incógnitas")
+    axes[1].set_ylabel("iteraciones")
+    axes[1].set_title("iteraciones hasta converger")
     axes[1].legend()
     for axis in axes:
         axis.grid(alpha=0.25, which="both")
@@ -137,23 +137,24 @@ def tone_mapping_figure(
     path: str | Path,
     exposures: tuple[float, ...] = (1.0, 60.0),
 ) -> Path:
-    """Compare a tone-mapped image against fixed exposures of the same radiance.
+    """Compara una imagen con mapeo tonal contra exposiciones fijas de la misma radiancia.
 
-    Two exposures are shown because that is the honest baseline: any single
-    global curve has to choose between the interior and the window, and showing
-    both makes the choice visible.
+    Se muestran dos exposiciones porque esa es la comparación honesta: cualquier
+    curva global tiene que elegir entre el interior y la ventana, y enseñar las
+    dos hace visible esa elección.
 
     Parameters
     ----------
     radiance : ndarray, shape (h, w, 3)
     mapped : ndarray, shape (h, w, 3)
     factor : ndarray, shape (h, w)
-        Attenuation field, displayed on a logarithmic scale.
-    path : str or Path
+        Campo de atenuación, mostrado en escala logarítmica.
+    path : str o Path
     exposures : tuple of float
-        Multipliers applied before the gamma curve, relative to a normalization
-        at the 99.5th percentile.  The defaults bracket the choice: one holds the
-        highlights and loses the interior, the other does the opposite.
+        Multiplicadores aplicados antes de la curva gamma, relativos a una
+        normalización en el percentil 99.5.  Los valores por defecto acotan la
+        elección: uno conserva las altas luces y pierde el interior, el otro hace
+        lo contrario.
 
     Returns
     -------
@@ -161,17 +162,20 @@ def tone_mapping_figure(
     """
     reference = float(np.percentile(radiance, 99.5))
     panels = [
-        (f"exposure {stop:g}x, gamma 2.2", np.clip(stop * radiance / reference, 0, 1) ** (1 / 2.2))
+        (
+            f"exposición {stop:g}x, gamma 2.2",
+            np.clip(stop * radiance / reference, 0, 1) ** (1 / 2.2),
+        )
         for stop in exposures
     ]
 
     figure, axes = plt.subplots(1, len(panels) + 2, figsize=(4.6 * (len(panels) + 2), 4.0))
     for axis, (title, image) in zip(axes, panels, strict=False):
         _show(axis, image, title)
-    _show(axes[len(panels)], mapped, "gradient-domain tone map")
+    _show(axes[len(panels)], mapped, "mapeo tonal en el dominio del gradiente")
 
     image = axes[-1].imshow(np.log10(np.maximum(factor, 1e-6)), cmap="magma")
-    axes[-1].set_title("log10 attenuation factor", fontsize=11)
+    axes[-1].set_title("log10 del factor de atenuación", fontsize=11)
     axes[-1].set_axis_off()
     figure.colorbar(image, ax=axes[-1], fraction=0.046)
 

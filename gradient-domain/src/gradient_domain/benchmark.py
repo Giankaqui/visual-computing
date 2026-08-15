@@ -1,15 +1,17 @@
-"""Cost comparison of the Poisson solvers.
+"""Comparación de coste de los solvers de Poisson.
 
-The benchmark solves the same manufactured problem at growing resolutions and
-records time and iteration count.  A manufactured solution is used rather than a
-real editing problem so the exact answer is known and every method can be held
-to the same residual, which is the only way the timings mean anything.
+El benchmark resuelve el mismo problema manufacturado a resoluciones crecientes y
+anota tiempo y número de iteraciones.  Se usa una solución manufacturada en lugar
+de un problema de edición real para conocer la respuesta exacta y poder exigir a
+todos los métodos el mismo residuo, que es la única forma de que los tiempos
+signifiquen algo.
 
-What the numbers are expected to show: the direct factorization is competitive
-at small sizes and then loses to fill-in; conjugate gradients needs a number of
-iterations that grows with the grid, because the condition number of the
-Laplacian does; and the multigrid variants need a number of cycles that does not,
-so their total work is proportional to the number of pixels.
+Lo que se espera que muestren los números: la factorización directa es
+competitiva a tamaños pequeños y luego pierde por el llenado; el gradiente
+conjugado necesita un número de iteraciones que crece con la malla, porque así lo
+hace el número de condición del laplaciano; y las variantes multigrid necesitan
+un número de ciclos que no crece, así que su trabajo total es proporcional al
+número de píxeles.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ __all__ = ["BenchmarkRecord", "solver_scaling", "manufactured_problem"]
 
 @dataclass
 class BenchmarkRecord:
-    """One measurement.
+    """Una medición.
 
     Attributes
     ----------
@@ -37,7 +39,7 @@ class BenchmarkRecord:
     iterations : int
     relative_residual : float
     max_error : float
-        Largest absolute difference from the known solution.
+        Mayor diferencia absoluta respecto a la solución conocida.
     """
 
     method: str
@@ -63,11 +65,11 @@ class BenchmarkRecord:
 def manufactured_problem(
     shape: tuple[int, int], seed: int = 0
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build a right-hand side whose exact solution is known.
+    """Construye un término independiente cuya solución exacta se conoce.
 
-    The solution mixes a few smooth modes with white noise, so it contains
-    energy across the whole spectrum.  A purely smooth solution would flatter
-    multigrid and a purely rough one would flatter relaxation.
+    La solución mezcla unos pocos modos suaves con ruido blanco, así que contiene
+    energía en todo el espectro.  Una solución puramente suave favorecería a
+    multigrid y una puramente rugosa favorecería a la relajación.
 
     Parameters
     ----------
@@ -77,7 +79,8 @@ def manufactured_problem(
     Returns
     -------
     b : ndarray, shape (m, n)
-        Right-hand side with homogeneous Dirichlet conditions folded in.
+        Término independiente con las condiciones de Dirichlet homogéneas ya
+        plegadas dentro.
     solution : ndarray, shape (m, n)
     """
     rng = np.random.default_rng(seed)
@@ -100,26 +103,26 @@ def solver_scaling(
     direct_limit: int = 600,
     seed: int = 0,
 ) -> dict[str, list[BenchmarkRecord]]:
-    """Time every solver on square grids of the given sizes.
+    """Cronometra cada solver sobre mallas cuadradas de los tamaños dados.
 
     Parameters
     ----------
     sizes : list of int
-        Side lengths of the square grids.
-    methods : list of str or None
-        Defaults to all four solvers.
+        Lados de las mallas cuadradas.
+    methods : list of str o None
+        Por defecto, los cuatro solvers.
     tolerance : float
-        Target relative residual.
+        Residuo relativo objetivo.
     max_iterations : int
     direct_limit : int
-        Grids larger than this are skipped for the direct method, whose
-        factorization becomes the dominant cost in both time and memory.
+        Las mallas mayores que esto se saltan para el método directo, cuya
+        factorización pasa a dominar el coste tanto en tiempo como en memoria.
     seed : int
 
     Returns
     -------
     dict
-        Maps a method name to its records, ordered by size.
+        Asocia cada nombre de método con sus registros, ordenados por tamaño.
     """
     methods = methods or ["direct", "cg", "multigrid", "mgcg"]
     results: dict[str, list[BenchmarkRecord]] = {method: [] for method in methods}
@@ -148,17 +151,17 @@ def solver_scaling(
 
 @dataclass
 class BenchmarkTable:
-    """Formatted view of a scaling run."""
+    """Vista formateada de un estudio de escalado."""
 
     results: dict[str, list[BenchmarkRecord]] = field(default_factory=dict)
 
     def to_markdown(self) -> str:
-        """Render the records as a Markdown table ordered by size then method."""
+        """Compone los registros como tabla Markdown ordenada por tamaño y método."""
         rows = [record for records in self.results.values() for record in records]
         rows.sort(key=lambda record: (record.unknowns, record.method))
 
         lines = [
-            "| Grid | Unknowns | Method | Iterations | Seconds | Max error |",
+            "| Malla | Incógnitas | Método | Iteraciones | Segundos | Error máx. |",
             "| --- | ---: | --- | ---: | ---: | ---: |",
         ]
         for record in rows:

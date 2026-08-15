@@ -1,10 +1,11 @@
-"""Gradient-domain image processing with multigrid Poisson solvers.
+"""Procesamiento en el dominio del gradiente con solvers de Poisson multigrid.
 
-Seamless cloning, texture flattening, local range compression and high dynamic
-range tone mapping are all the same computation: choose a target gradient field,
-then find the image whose gradient is closest to it.  The package implements that
-integration step four ways, from a sparse direct factorization to a geometric
-multigrid V-cycle, and the applications on top of it.
+El clonado sin costura, el aplanado de textura, la compresión de rango local y el
+mapeo tonal de alto rango dinámico son todos el mismo cálculo: elegir un campo de
+gradiente objetivo y encontrar la imagen cuyo gradiente más se le parece.  El
+paquete implementa ese paso de integración de cuatro maneras, desde una
+factorización dispersa directa hasta un ciclo V multigrid geométrico, y encima
+las aplicaciones.
 """
 
 from .benchmark import BenchmarkRecord, BenchmarkTable, manufactured_problem, solver_scaling

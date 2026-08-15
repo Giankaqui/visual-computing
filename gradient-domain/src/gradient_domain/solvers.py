@@ -1,33 +1,34 @@
-"""Linear solvers for the interior Dirichlet Poisson system.
+"""Solvers lineales para el sistema de Poisson interior con Dirichlet.
 
-Four methods are provided for the same system, which is what makes the cost
-comparison in the benchmarks meaningful.
+Se ofrecen cuatro métodos para el mismo sistema, que es lo que hace significativa
+la comparación de costes de los benchmarks.
 
 ``direct``
-    Sparse LU of the five-point Laplacian.  Exact up to rounding and the right
-    choice when the same operator is reused for many right-hand sides, since the
-    factorization is computed once.  Its memory grows faster than the grid
-    because of fill-in, which is what rules it out at high resolution.
+    LU dispersa del laplaciano de cinco puntos.  Exacto salvo redondeo y la
+    elección correcta cuando el mismo operador se reutiliza para muchos términos
+    independientes, ya que la factorización se calcula una sola vez.  Su memoria
+    crece más rápido que la malla por el llenado, que es lo que acaba
+    descartándolo a alta resolución.
 
 ``cg``
-    Conjugate gradients with Jacobi preconditioning, matrix free.  Memory is
-    proportional to the grid, but the iteration count grows with the condition
-    number of the Laplacian, which scales as the number of pixels; the work is
-    therefore superlinear.
+    Gradiente conjugado con precondicionado de Jacobi, sin matriz.  La memoria es
+    proporcional a la malla, pero el número de iteraciones crece con el número de
+    condición del laplaciano, que escala con el número de píxeles; el trabajo es
+    por tanto superlineal.
 
 ``multigrid``
-    V-cycles from :mod:`gradient_domain.multigrid`.  The iteration count is
-    independent of the grid size, so the total work is linear.
+    Ciclos V de :mod:`gradient_domain.multigrid`.  El número de iteraciones es
+    independiente del tamaño de malla, así que el trabajo total es lineal.
 
 ``mgcg``
-    Conjugate gradients preconditioned by one V-cycle.  It keeps the linear
-    behaviour of multigrid and recovers the cases where the plain cycle
-    converges slowly, which here means grids whose size does not coarsen
-    exactly.  It is the default for that reason.
+    Gradiente conjugado precondicionado con un ciclo V.  Mantiene el
+    comportamiento lineal de multigrid y recupera los casos en los que el ciclo
+    simple converge despacio, que aquí son las mallas cuyo tamaño no engrosa de
+    forma exacta.  Por eso es el método por defecto.
 
-All methods solve the positive definite system ``-L u = -b`` rather than
-``L u = b``; the Laplacian as written is negative definite, and conjugate
-gradients requires positive definiteness.
+Todos los métodos resuelven el sistema definido positivo ``-L u = -b`` en lugar
+de ``L u = b``; el laplaciano tal como está escrito es definido negativo, y el
+gradiente conjugado exige que sea definido positivo.
 """
 
 from __future__ import annotations
@@ -47,15 +48,16 @@ __all__ = ["SolverReport", "SOLVERS", "solve_system", "solve_neumann"]
 
 @dataclass
 class SolverReport:
-    """Cost and accuracy of one solve.
+    """Coste y precisión de una resolución.
 
     Attributes
     ----------
     method : str
     iterations : int
-        Iterations or cycles; zero for the direct method.
+        Iteraciones o ciclos; cero para el método directo.
     relative_residual : float
-        Euclidean norm of the residual over the norm of the right-hand side.
+        Norma euclídea del residuo dividida por la norma del término
+        independiente.
     seconds : float
     converged : bool
     """
@@ -68,8 +70,8 @@ class SolverReport:
 
     def __str__(self) -> str:
         return (
-            f"{self.method}: {self.iterations} iterations, "
-            f"residual {self.relative_residual:.2e}, {self.seconds * 1e3:.0f} ms"
+            f"{self.method}: {self.iterations} iteraciones, "
+            f"residuo {self.relative_residual:.2e}, {self.seconds * 1e3:.0f} ms"
         )
 
 
@@ -91,9 +93,9 @@ def _solve_direct(
 def _solve_cg(
     b: np.ndarray, spacing: float, tolerance: float, max_iterations: int
 ) -> tuple[np.ndarray, int, bool]:
-    # Jacobi preconditioning on a constant-coefficient operator is a scalar, so
-    # it changes nothing but the step scale; it is kept because it makes the
-    # residual comparable with the preconditioned variants.
+    # El precondicionado de Jacobi sobre un operador de coeficientes constantes
+    # es un escalar, así que solo cambia la escala del paso; se mantiene porque
+    # hace comparable el residuo con el de las variantes precondicionadas.
     diagonal = 4.0 / (spacing * spacing)
     rhs = -b
     u = np.zeros_like(b)
@@ -173,19 +175,19 @@ def solve_system(
     tolerance: float = 1e-8,
     max_iterations: int = 2000,
 ) -> tuple[np.ndarray, SolverReport]:
-    """Solve ``laplacian(u) = b`` with homogeneous Dirichlet conditions.
+    """Resuelve ``laplacian(u) = b`` con condiciones de Dirichlet homogéneas.
 
     Parameters
     ----------
     b : ndarray, shape (m, n)
-        Right-hand side on the interior unknowns.
+        Término independiente sobre las incógnitas interiores.
     method : {'direct', 'cg', 'multigrid', 'mgcg'}
     spacing : float
-        Grid spacing.
+        Paso de malla.
     tolerance : float
-        Target relative residual, ignored by the direct method.
+        Residuo relativo objetivo; el método directo lo ignora.
     max_iterations : int
-        Iteration or cycle budget for the iterative methods.
+        Presupuesto de iteraciones o ciclos para los métodos iterativos.
 
     Returns
     -------
@@ -195,10 +197,10 @@ def solve_system(
     Raises
     ------
     KeyError
-        If ``method`` is not one of the supported names.
+        Si ``method`` no es uno de los nombres soportados.
     """
     if method not in SOLVERS:
-        raise KeyError(f"unknown solver {method!r}; choose from {sorted(SOLVERS)}")
+        raise KeyError(f"solver desconocido {method!r}; elige entre {sorted(SOLVERS)}")
 
     b = np.asarray(b, dtype=float)
     if not np.any(b):
@@ -220,30 +222,31 @@ def solve_system(
 
 
 def solve_neumann(b: np.ndarray) -> np.ndarray:
-    """Solve ``laplacian(u) = b`` with homogeneous Neumann conditions.
+    """Resuelve ``laplacian(u) = b`` con condiciones de Neumann homogéneas.
 
-    Reflecting the domain across its borders turns the five-point Laplacian into
-    a circulant operator that the discrete cosine transform diagonalizes, with
-    eigenvalues ``2 cos(pi i / m) + 2 cos(pi j / n) - 4``.  The solve is then one
-    forward transform, a division and one inverse transform, which is exact and
-    costs ``O(N log N)`` with no iteration at all.
+    Reflejar el dominio a través de sus bordes convierte el laplaciano de cinco
+    puntos en un operador circulante que la transformada discreta del coseno
+    diagonaliza, con autovalores ``2 cos(pi i / m) + 2 cos(pi j / n) - 4``.  La
+    resolución es entonces una transformada directa, una división y una
+    transformada inversa, lo cual es exacto y cuesta ``O(N log N)`` sin iterar
+    nada.
 
-    Neumann conditions leave the solution undetermined up to an additive
-    constant, which shows as a zero eigenvalue; that coefficient is set to zero,
-    which selects the solution with zero mean.  This is the right boundary
-    condition when the guidance field is defined on the whole image and no part
-    of it should be pinned, as in tone mapping.
+    Las condiciones de Neumann dejan la solución indeterminada salvo una
+    constante aditiva, que aparece como un autovalor nulo; ese coeficiente se
+    pone a cero, lo que selecciona la solución de media nula.  Esta es la
+    condición de contorno correcta cuando el campo guía está definido sobre toda
+    la imagen y ninguna parte de ella debe quedar fijada, como en el mapeo tonal.
 
     Parameters
     ----------
     b : ndarray, shape (m, n)
-        Right-hand side, with the compatibility condition ``sum(b) == 0``
-        implied; any constant component is discarded.
+        Término independiente, con la condición de compatibilidad
+        ``sum(b) == 0`` implícita; cualquier componente constante se descarta.
 
     Returns
     -------
     ndarray, shape (m, n)
-        Zero-mean solution.
+        Solución de media nula.
     """
     b = np.asarray(b, dtype=float)
     rows, columns = b.shape

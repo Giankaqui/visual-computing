@@ -1,28 +1,30 @@
-"""Gradient-domain image editing.
+"""Edición de imágenes en el dominio del gradiente.
 
-Every operation here has the same shape.  A guidance field is built by modifying
-the gradients of one or more input images, and the output is the image whose
-gradient best matches that field subject to boundary conditions.  What changes
-between applications is only how the guidance field is chosen.
+Todas las operaciones de aquí tienen la misma forma.  Se construye un campo guía
+modificando los gradientes de una o varias imágenes de entrada, y la salida es la
+imagen cuyo gradiente mejor encaja con ese campo sujeto a condiciones de
+contorno.  Lo único que cambia entre aplicaciones es cómo se elige el campo guía.
 
-Two domains are supported, and the difference is worth understanding.
+Hay dos dominios soportados, y la diferencia merece entenderse.
 
 ``mask``
-    The unknowns are the pixels inside the selection, and the pixels just outside
-    it supply Dirichlet values.  This is the formulation of Perez, Gangnet and
-    Blake (2003).  The output equals the target exactly outside the selection,
-    which is usually what an editing tool should guarantee, but the domain is
-    irregular, so the system has to be assembled explicitly and factorized.
+    Las incógnitas son los píxeles de dentro de la selección, y los píxeles justo
+    de fuera aportan los valores de Dirichlet.  Es la formulación de Pérez,
+    Gangnet y Blake (2003).  La salida coincide exactamente con el destino fuera
+    de la selección, que suele ser lo que una herramienta de edición debería
+    garantizar, pero el dominio es irregular, así que el sistema hay que montarlo
+    y factorizarlo explícitamente.
 
 ``rectangle``
-    The unknowns are a rectangle around the selection, the guidance field is the
-    source gradient inside it and the target gradient outside, and the rectangle
-    border supplies the boundary values.  The residual outside the selection is
-    then a harmonic function with zero boundary values, so it is small but not
-    exactly zero.  In exchange the domain is regular, which is what geometric
-    multigrid needs, and the solve is linear in the number of pixels.
+    Las incógnitas son un rectángulo alrededor de la selección, el campo guía es
+    el gradiente de la fuente dentro y el del destino fuera, y el borde del
+    rectángulo aporta los valores de contorno.  El residuo fuera de la selección
+    es entonces una función armónica con valores de contorno nulos, así que es
+    pequeño pero no exactamente cero.  A cambio el dominio es regular, que es lo
+    que necesita el multigrid geométrico, y la resolución es lineal en el número
+    de píxeles.
 
-The two agree to within that harmonic correction, which the tests verify.
+Ambas coinciden salvo esa corrección armónica, cosa que los tests verifican.
 """
 
 from __future__ import annotations
@@ -49,12 +51,12 @@ __all__ = [
 
 @dataclass
 class GuidanceField:
-    """A target gradient field.
+    """Un campo de gradiente objetivo.
 
     Attributes
     ----------
-    gx, gy : ndarray, shape (h, w) or (h, w, c)
-        Desired horizontal and vertical derivatives.
+    gx, gy : ndarray, shape (h, w) o (h, w, c)
+        Derivadas horizontal y vertical deseadas.
     """
 
     gx: np.ndarray
@@ -62,23 +64,23 @@ class GuidanceField:
 
     @classmethod
     def of(cls, image: np.ndarray) -> GuidanceField:
-        """The field that reproduces ``image`` exactly."""
+        """El campo que reproduce ``image`` exactamente."""
         return cls(*gradient(image))
 
     def select(self, mask: np.ndarray, other: GuidanceField) -> GuidanceField:
-        """Take this field inside ``mask`` and ``other`` outside it."""
+        """Toma este campo dentro de ``mask`` y ``other`` fuera de ella."""
         selector = mask[..., None] if self.gx.ndim == 3 else mask
         return GuidanceField(
             np.where(selector, self.gx, other.gx), np.where(selector, self.gy, other.gy)
         )
 
     def mix_by_magnitude(self, other: GuidanceField) -> GuidanceField:
-        """Keep, per component, whichever field has the larger magnitude.
+        """Conserva, componente a componente, el campo de mayor magnitud.
 
-        This is the mixed-gradient variant: it lets strong structure in the
-        destination survive underneath a source region that is comparatively
-        flat, which is what makes pasting onto a textured background look right
-        instead of erasing it.
+        Es la variante de gradientes mezclados: deja que la estructura fuerte del
+        destino sobreviva bajo una región de fuente comparativamente plana, que
+        es lo que hace que pegar sobre un fondo con textura quede bien en vez de
+        borrarlo.
         """
         return GuidanceField(
             np.where(np.abs(self.gx) >= np.abs(other.gx), self.gx, other.gx),
@@ -86,12 +88,12 @@ class GuidanceField:
         )
 
     def scaled(self, factor: np.ndarray | float) -> GuidanceField:
-        """Multiply both components by a scalar or a per-pixel factor."""
+        """Multiplica ambas componentes por un escalar o un factor por píxel."""
         return GuidanceField(self.gx * factor, self.gy * factor)
 
 
 def _as_channels(image: np.ndarray) -> tuple[np.ndarray, bool]:
-    """Return a ``(h, w, c)`` view and whether the input was single channel."""
+    """Devuelve una vista ``(h, w, c)`` y si la entrada era de un solo canal."""
     if image.ndim == 2:
         return image[..., None], True
     return image, False
@@ -104,26 +106,26 @@ def solve_dirichlet(
     tolerance: float = 1e-8,
     max_iterations: int = 2000,
 ) -> tuple[np.ndarray, list[SolverReport]]:
-    """Integrate a guidance field on a rectangle with fixed borders.
+    """Integra un campo guía sobre un rectángulo con los bordes fijados.
 
     Parameters
     ----------
     field : GuidanceField
-        Target gradients on the full rectangle.
-    boundary : ndarray, shape (h, w) or (h, w, c)
-        Image whose one-pixel border supplies the Dirichlet values; its interior
-        is ignored.
+        Gradientes objetivo sobre el rectángulo completo.
+    boundary : ndarray, shape (h, w) o (h, w, c)
+        Imagen cuyo borde de un píxel aporta los valores de Dirichlet; su
+        interior se ignora.
     method : str
-        Name of a solver in :data:`gradient_domain.solvers.SOLVERS`.
+        Nombre de un solver de :data:`gradient_domain.solvers.SOLVERS`.
     tolerance : float
     max_iterations : int
 
     Returns
     -------
     image : ndarray
-        Same shape as ``boundary``, equal to it on the border.
+        Misma forma que ``boundary``, e igual a ella en el borde.
     reports : list of SolverReport
-        One entry per colour channel.
+        Una entrada por canal de color.
     """
     boundary_channels, was_gray = _as_channels(np.asarray(boundary, dtype=float))
     right_hand_side = divergence(field.gx, field.gy)
@@ -152,26 +154,26 @@ def _neighbour_offsets() -> tuple[tuple[int, int], ...]:
 def solve_masked(
     field: GuidanceField, image: np.ndarray, mask: np.ndarray
 ) -> tuple[np.ndarray, list[SolverReport]]:
-    """Integrate a guidance field on the pixels selected by ``mask``.
+    """Integra un campo guía sobre los píxeles que selecciona ``mask``.
 
-    Pixels outside the mask keep their value and act as Dirichlet data.  The
-    system is assembled once and factorized once, then reused for every colour
-    channel, which is where most of the saving comes from on a multi-channel
-    image.
+    Los píxeles fuera de la máscara conservan su valor y actúan como datos de
+    Dirichlet.  El sistema se monta y se factoriza una sola vez y luego se
+    reutiliza para cada canal de color, que es de donde sale casi todo el ahorro
+    en una imagen multicanal.
 
     Parameters
     ----------
     field : GuidanceField
-        Target gradients, defined on the whole image.
-    image : ndarray, shape (h, w) or (h, w, c)
-        Destination image; supplies the boundary values.
+        Gradientes objetivo, definidos sobre toda la imagen.
+    image : ndarray, shape (h, w) o (h, w, c)
+        Imagen de destino; aporta los valores de contorno.
     mask : ndarray of bool, shape (h, w)
-        Pixels to solve for.
+        Píxeles que hay que resolver.
 
     Returns
     -------
     result : ndarray
-        Same shape as ``image``.
+        Misma forma que ``image``.
     reports : list of SolverReport
     """
     channels, was_gray = _as_channels(np.asarray(image, dtype=float))
@@ -243,11 +245,11 @@ def solve_masked(
 
 
 def _place(source: np.ndarray, mask: np.ndarray, target_shape, offset: tuple[int, int]):
-    """Paste a source patch and its mask into a target-sized canvas."""
+    """Pega un recorte de fuente y su máscara en un lienzo del tamaño del destino."""
     row, column = offset
     height, width = source.shape[:2]
     if row < 0 or column < 0 or row + height > target_shape[0] or column + width > target_shape[1]:
-        raise ValueError("the source patch does not fit inside the target at this offset")
+        raise ValueError("el recorte de fuente no cabe en el destino con este desplazamiento")
 
     canvas = np.zeros(target_shape, dtype=float)
     canvas[row : row + height, column : column + width] = source
@@ -266,48 +268,49 @@ def seamless_clone(
     method: str = "mgcg",
     margin: int = 24,
 ) -> tuple[np.ndarray, list[SolverReport]]:
-    """Paste a region of ``source`` into ``target`` without a visible seam.
+    """Pega una región de ``source`` en ``target`` sin costura visible.
 
-    Copying pixels transfers the source's absolute colour, which almost never
-    matches the destination.  Copying gradients instead transfers only the
-    relative variation, and the absolute level is recovered from the destination
-    through the boundary condition, so the insert takes on the surrounding
-    illumination.
+    Copiar píxeles transfiere el color absoluto de la fuente, que casi nunca
+    encaja con el destino.  Copiar gradientes transfiere en cambio solo la
+    variación relativa, y el nivel absoluto se recupera del destino a través de
+    la condición de contorno, así que el inserto adopta la iluminación de su
+    entorno.
 
     Parameters
     ----------
-    source : ndarray, shape (sh, sw) or (sh, sw, c)
-        Patch to insert.
-    target : ndarray, shape (h, w) or (h, w, c)
-        Destination image.
+    source : ndarray, shape (sh, sw) o (sh, sw, c)
+        Recorte que se inserta.
+    target : ndarray, shape (h, w) o (h, w, c)
+        Imagen de destino.
     mask : ndarray of bool, shape (sh, sw)
-        Selection inside the source patch.
+        Selección dentro del recorte de fuente.
     offset : tuple of int
-        Position of the patch's top-left corner in the target.
+        Posición de la esquina superior izquierda del recorte en el destino.
     mode : {'import', 'mixed', 'average'}
-        How the source and destination gradients are combined inside the mask.
+        Cómo se combinan los gradientes de fuente y destino dentro de la máscara.
     domain : {'mask', 'rectangle'}
-        Which formulation to use; see the module docstring.
+        Qué formulación usar; ver el docstring del módulo.
     method : str
-        Solver name, used only by the rectangle formulation.
+        Nombre del solver, usado solo por la formulación de rectángulo.
     margin : int
-        Padding around the mask bounding box for the rectangle formulation.
+        Margen alrededor de la caja envolvente de la máscara para la formulación
+        de rectángulo.
 
     Returns
     -------
     result : ndarray
-        Same shape as ``target``.
+        Misma forma que ``target``.
     reports : list of SolverReport
 
     Raises
     ------
     ValueError
-        For an unknown ``mode`` or ``domain``, or if the patch does not fit.
+        Si ``mode`` o ``domain`` son desconocidos, o si el recorte no cabe.
     """
     target = np.asarray(target, dtype=float)
     source = np.asarray(source, dtype=float)
     if source.ndim != target.ndim:
-        raise ValueError("source and target must have the same number of dimensions")
+        raise ValueError("source y target deben tener el mismo número de dimensiones")
 
     placed, placed_mask = _place(source, mask, target.shape, offset)
     source_field = GuidanceField.of(placed)
@@ -322,14 +325,14 @@ def seamless_clone(
             0.5 * (source_field.gx + target_field.gx), 0.5 * (source_field.gy + target_field.gy)
         )
     else:
-        raise ValueError(f"unknown mode {mode!r}")
+        raise ValueError(f"modo desconocido {mode!r}")
 
     field = inside.select(placed_mask, target_field)
 
     if domain == "mask":
         return solve_masked(field, target, placed_mask)
     if domain != "rectangle":
-        raise ValueError(f"unknown domain {domain!r}")
+        raise ValueError(f"dominio desconocido {domain!r}")
 
     rows, columns = np.nonzero(placed_mask)
     top = max(int(rows.min()) - margin, 0)
@@ -351,22 +354,23 @@ def texture_flatten(
     method: str = "mgcg",
     mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, list[SolverReport]]:
-    """Remove texture while keeping the edges that define the shapes.
+    """Elimina la textura conservando los bordes que definen las formas.
 
-    The guidance field is the image gradient multiplied by an indicator that is
-    one on the retained edges and zero elsewhere.  Integrating a field that is
-    zero over a region forces that region to be as flat as the boundary
-    conditions allow, so texture disappears and the large-scale structure stays.
+    El campo guía es el gradiente de la imagen multiplicado por un indicador que
+    vale uno sobre los bordes que se conservan y cero en el resto.  Integrar un
+    campo que es nulo en una región obliga a esa región a quedar tan plana como
+    permitan las condiciones de contorno, así que la textura desaparece y la
+    estructura a gran escala se queda.
 
     Parameters
     ----------
-    image : ndarray, shape (h, w) or (h, w, c)
+    image : ndarray, shape (h, w) o (h, w, c)
     edges : ndarray, shape (h, w)
-        Weights in ``[0, 1]``; a binary edge map is the usual choice.
+        Pesos en ``[0, 1]``; lo habitual es un mapa de bordes binario.
     method : str
-        Solver name.
-    mask : ndarray of bool, shape (h, w), optional
-        Restricts the effect to a region, solved with the mask formulation.
+        Nombre del solver.
+    mask : ndarray of bool, shape (h, w), opcional
+        Restringe el efecto a una región, resuelta con la formulación de máscara.
 
     Returns
     -------
@@ -391,28 +395,29 @@ def illumination_change(
     beta: float = 0.2,
     epsilon: float = 1e-4,
 ) -> tuple[np.ndarray, list[SolverReport]]:
-    """Compress the local dynamic range inside a selection.
+    """Comprime el rango dinámico local dentro de una selección.
 
-    The gradient magnitude is remapped by ``alpha ** beta * g ** (-beta)``, which
-    attenuates large gradients more than small ones.  Applied inside a selection
-    with the surrounding pixels fixed, this lifts detail out of shadows without
-    changing the overall illumination of the image.
+    La magnitud del gradiente se remapea con ``alpha ** beta * g ** (-beta)``,
+    que atenúa los gradientes grandes más que los pequeños.  Aplicado dentro de
+    una selección con los píxeles del entorno fijados, esto saca detalle de las
+    sombras sin cambiar la iluminación global de la imagen.
 
     Parameters
     ----------
-    image : ndarray, shape (h, w) or (h, w, c)
-        Values are expected in ``[0, 1]``.
+    image : ndarray, shape (h, w) o (h, w, c)
+        Se esperan valores en ``[0, 1]``.
     mask : ndarray of bool, shape (h, w)
     alpha : float
-        Gradient magnitude that is left unchanged; smaller values darken less.
+        Magnitud de gradiente que se deja intacta; valores más pequeños oscurecen
+        menos.
     beta : float
-        Exponent of the attenuation, in ``[0, 1]``.  Note that the convention is
-        the opposite of the one in :mod:`gradient_domain.hdr`: here zero leaves
-        the image unchanged and one flattens it to a constant gradient
-        magnitude, following Perez et al. rather than Fattal et al.
+        Exponente de la atenuación, en ``[0, 1]``.  Ojo: el convenio es el
+        opuesto al de :mod:`gradient_domain.hdr`; aquí cero deja la imagen
+        intacta y uno la aplana a una magnitud de gradiente constante, siguiendo
+        a Pérez et al. y no a Fattal et al.
     epsilon : float
-        Floor on the gradient magnitude, which keeps flat regions from being
-        amplified without bound.
+        Suelo para la magnitud del gradiente, que evita que las regiones planas
+        se amplifiquen sin límite.
 
     Returns
     -------

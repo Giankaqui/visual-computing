@@ -1,23 +1,25 @@
-"""Gradient-domain tone mapping of high dynamic range images.
+"""Mapeo tonal en el dominio del gradiente para imágenes de alto rango dinámico.
 
-A radiance map can span five orders of magnitude, and a display covers two.
-Scaling the values globally destroys either the highlights or the shadows.  The
-observation of Fattal, Lischinski and Werman (2002) is that dynamic range lives
-in the *large* gradients of the log-radiance image, while detail lives in the
-small ones, so attenuating gradients by a factor that decreases with their
-magnitude compresses the range and leaves detail alone.
+Un mapa de radiancia puede abarcar cinco órdenes de magnitud y una pantalla
+cubre dos.  Escalar los valores globalmente destruye o las altas luces o las
+sombras.  La observación de Fattal, Lischinski y Werman (2002) es que el rango
+dinámico vive en los gradientes *grandes* de la imagen de log-radiancia mientras
+que el detalle vive en los pequeños, así que atenuar los gradientes con un
+factor que decrece con su magnitud comprime el rango y deja el detalle en paz.
 
-The attenuation has to act at the right scale.  A large edge in the image is not
-a single large gradient at full resolution; it is a ramp spread over many pixels,
-each of whose gradients is moderate.  The factor is therefore computed on a
-Gaussian pyramid and propagated from coarse to fine, so that a pixel sitting on
-a large-scale edge is attenuated even when its own local gradient is small.
+La atenuación tiene que actuar a la escala correcta.  Un borde grande de la
+imagen no es un único gradiente grande a resolución completa; es una rampa
+repartida entre muchos píxeles, cada uno con un gradiente moderado.  Por eso el
+factor se calcula sobre una pirámide gaussiana y se propaga de grueso a fino, de
+modo que un píxel situado sobre un borde a gran escala se atenúa aunque su
+gradiente local sea pequeño.
 
-The attenuated field is not the gradient of any image, so it has to be
-integrated in the least-squares sense, which is again a Poisson equation.  Here
-the natural boundary condition is Neumann: nothing in the image should be pinned
-to a prescribed value, and only differences matter.  That makes the cosine
-transform solver in :mod:`gradient_domain.solvers` exact and immediate.
+El campo atenuado no es el gradiente de ninguna imagen, así que hay que
+integrarlo en el sentido de mínimos cuadrados, que es de nuevo una ecuación de
+Poisson.  Aquí la condición de contorno natural es la de Neumann: nada en la
+imagen debe quedar fijado a un valor prescrito, y solo importan las diferencias.
+Eso hace que el solver por transformada del coseno de
+:mod:`gradient_domain.solvers` sea exacto e inmediato.
 """
 
 from __future__ import annotations
@@ -34,30 +36,31 @@ __all__ = ["ToneMapConfig", "attenuation_field", "tone_map"]
 
 @dataclass
 class ToneMapConfig:
-    """Parameters of the attenuation.
+    """Parámetros de la atenuación.
 
     Attributes
     ----------
     alpha : float
-        Gradient magnitude left unchanged, expressed as a multiple of the mean
-        gradient magnitude of the level.  Gradients below it are amplified and
-        gradients above it are attenuated.
+        Magnitud de gradiente que se deja intacta, expresada como múltiplo de la
+        magnitud media de gradiente del nivel.  Los gradientes por debajo se
+        amplifican y los de por encima se atenúan.
     beta : float
-        Exponent in ``(0, 1]``.  The factor is ``(g / alpha) ** (beta - 1)``, so
-        ``beta = 1`` leaves every gradient untouched and smaller values attenuate
-        the large ones more aggressively.  The original work recommends 0.8 to
-        0.9, which is a deliberately mild setting: over-attenuating produces the
-        washed-out, low-contrast look that gives tone mapping a bad name.
+        Exponente en ``(0, 1]``.  El factor es ``(g / alpha) ** (beta - 1)``, así
+        que ``beta = 1`` deja todos los gradientes intactos y los valores más
+        pequeños atenúan los grandes de forma más agresiva.  El artículo original
+        recomienda entre 0.8 y 0.9, que es un ajuste deliberadamente suave:
+        atenuar de más produce ese aspecto lavado y sin contraste que le ha dado
+        mala fama al mapeo tonal.
     saturation : float
-        Exponent applied to the chromatic ratios.  Compressing luminance without
-        this leaves colours looking oversaturated, because the ratios that
-        produced them were tuned to a much larger luminance range.
+        Exponente aplicado a las razones cromáticas.  Comprimir la luminancia sin
+        esto deja los colores sobresaturados, porque las razones que los
+        produjeron estaban ajustadas a un rango de luminancia mucho mayor.
     levels : int
-        Pyramid levels used to propagate the attenuation; the pyramid stops
-        early when a level would fall below eight pixels.
+        Niveles de pirámide usados para propagar la atenuación; la pirámide para
+        antes si un nivel bajaría de ocho píxeles.
     epsilon : float
-        Floor on gradient magnitudes, which keeps flat regions from being
-        amplified without bound.
+        Suelo para las magnitudes de gradiente, que evita que las regiones planas
+        se amplifiquen sin límite.
     """
 
     alpha: float = 0.1
@@ -68,7 +71,7 @@ class ToneMapConfig:
 
 
 def _downsample(image: np.ndarray) -> np.ndarray:
-    """Blur with a binomial kernel and drop every other sample."""
+    """Difumina con un núcleo binomial y descarta una muestra de cada dos."""
     kernel = np.array([1.0, 4.0, 6.0, 4.0, 1.0]) / 16.0
     padded = np.pad(image, ((0, 0), (2, 2)), mode="edge")
     blurred = sum(weight * padded[:, i : i + image.shape[1]] for i, weight in enumerate(kernel))
@@ -78,7 +81,7 @@ def _downsample(image: np.ndarray) -> np.ndarray:
 
 
 def _upsample(image: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
-    """Bilinear interpolation back to a finer grid."""
+    """Interpolación bilineal de vuelta a una malla más fina."""
     rows = np.linspace(0, image.shape[0] - 1, shape[0])
     columns = np.linspace(0, image.shape[1] - 1, shape[1])
     row0 = np.floor(rows).astype(int)
@@ -94,7 +97,7 @@ def _upsample(image: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
 
 
 def _central_gradient(image: np.ndarray, spacing: float) -> tuple[np.ndarray, np.ndarray]:
-    """Central differences with replicated borders."""
+    """Diferencias centradas con los bordes replicados."""
     padded = np.pad(image, 1, mode="edge")
     gx = (padded[1:-1, 2:] - padded[1:-1, :-2]) / (2.0 * spacing)
     gy = (padded[2:, 1:-1] - padded[:-2, 1:-1]) / (2.0 * spacing)
@@ -102,18 +105,18 @@ def _central_gradient(image: np.ndarray, spacing: float) -> tuple[np.ndarray, np
 
 
 def attenuation_field(log_luminance: np.ndarray, config: ToneMapConfig) -> np.ndarray:
-    """Build the multiscale gradient attenuation factor.
+    """Construye el factor multiescala de atenuación de gradientes.
 
     Parameters
     ----------
     log_luminance : ndarray, shape (h, w)
-        Logarithm of the luminance channel.
+        Logaritmo del canal de luminancia.
     config : ToneMapConfig
 
     Returns
     -------
     ndarray, shape (h, w)
-        Per-pixel factor to apply to the gradient field.
+        Factor por píxel que se aplica al campo de gradiente.
     """
     pyramid = [log_luminance]
     while len(pyramid) < config.levels and min(pyramid[-1].shape) > 16:
@@ -134,45 +137,46 @@ def attenuation_field(log_luminance: np.ndarray, config: ToneMapConfig) -> np.nd
 def tone_map(
     radiance: np.ndarray, config: ToneMapConfig | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Compress a radiance map to a displayable image.
+    """Comprime un mapa de radiancia hasta una imagen mostrable.
 
     Parameters
     ----------
     radiance : ndarray, shape (h, w, 3)
-        Linear radiance with an arbitrary scale; only ratios matter.
-    config : ToneMapConfig or None
+        Radiancia lineal con escala arbitraria; solo importan las razones.
+    config : ToneMapConfig o None
 
     Returns
     -------
     image : ndarray of float, shape (h, w, 3)
-        Display-referred values in ``[0, 1]``.
+        Valores referidos a pantalla en ``[0, 1]``.
     factor : ndarray, shape (h, w)
-        The attenuation field that was applied, returned for inspection.
+        El campo de atenuación que se aplicó, devuelto para poder inspeccionarlo.
 
     Raises
     ------
     ValueError
-        If the input is not a three-channel image.
+        Si la entrada no es una imagen de tres canales.
     """
     config = config or ToneMapConfig()
     radiance = np.asarray(radiance, dtype=float)
     if radiance.ndim != 3 or radiance.shape[2] != 3:
-        raise ValueError("tone mapping expects a three-channel radiance map")
+        raise ValueError("el mapeo tonal espera un mapa de radiancia de tres canales")
 
     luminance = radiance @ np.array([0.2126, 0.7152, 0.0722])
     luminance = np.maximum(luminance, np.finfo(float).tiny)
     log_luminance = np.log(luminance)
 
     factor = attenuation_field(log_luminance, config)
-    # The magnitudes that drive the attenuation come from central differences,
-    # which are unbiased, but the field that gets integrated uses the forward
-    # differences whose exact adjoint is the divergence in `operators`.  Mixing
-    # the two stencils here would leave a residual the solver cannot remove.
+    # Las magnitudes que dirigen la atenuación salen de diferencias centradas,
+    # que son insesgadas, pero el campo que se integra usa las diferencias hacia
+    # delante cuyo adjunto exacto es la divergencia de `operators`.  Mezclar las
+    # dos plantillas aquí dejaría un residuo que el solver no puede eliminar.
     gx, gy = gradient(log_luminance)
     compressed = solve_neumann(divergence(gx * factor, gy * factor))
 
-    # The solution is defined up to a constant; anchoring the brightest pixel
-    # puts the result in a predictable range before the final normalization.
+    # La solución está definida salvo una constante; anclar el píxel más
+    # brillante deja el resultado en un rango predecible antes de la
+    # normalización final.
     result = np.exp(compressed - compressed.max())
     ratios = radiance / luminance[..., None]
     image = (ratios ** config.saturation) * result[..., None]

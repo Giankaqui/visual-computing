@@ -1,31 +1,33 @@
-"""Geometric multigrid for the Dirichlet Poisson problem.
+"""Multigrid geométrico para el problema de Poisson con condiciones de Dirichlet.
 
-A relaxation scheme such as Gauss-Seidel removes the high-frequency part of the
-error in a handful of sweeps and then stalls: the low-frequency part is what
-makes plain relaxation converge in ``O(N)`` sweeps on an ``N``-pixel grid.  The
-observation behind multigrid is that error which is smooth on a fine grid is not
-smooth on a grid twice as coarse, so it can be relaxed there instead, at a
-quarter of the cost.
+Un esquema de relajación como Gauss-Seidel elimina la parte de alta frecuencia
+del error en unas pocas pasadas y luego se estanca: la parte de baja frecuencia
+es lo que hace que la relajación a secas necesite ``O(N)`` pasadas en una malla
+de ``N`` píxeles.  La observación detrás de multigrid es que un error suave en
+una malla fina no es suave en una malla dos veces más gruesa, así que se puede
+relajar allí en su lugar, a la cuarta parte del coste.
 
-One V-cycle applies that recursively: smooth, restrict the residual, solve the
-coarse problem approximately by the same procedure, interpolate the correction
-back, smooth again.  The cost of a cycle is a small constant times the cost of a
-fine-grid sweep, because the grids shrink geometrically, and the error is reduced
-by a factor that does not depend on the grid size.  The total work to reach a
-fixed tolerance is therefore proportional to the number of pixels, which is
-optimal.
+Un ciclo V aplica eso de forma recursiva: suavizar, restringir el residuo,
+resolver aproximadamente el problema grueso con el mismo procedimiento,
+interpolar la corrección de vuelta y volver a suavizar.  El coste de un ciclo es
+una constante pequeña por el coste de una pasada en la malla fina, porque las
+mallas encogen geométricamente, y el error se reduce en un factor que no depende
+del tamaño de malla.  El trabajo total para alcanzar una tolerancia fija es por
+tanto proporcional al número de píxeles, que es lo óptimo.
 
-Grid transfers are the bilinear interpolation ``P`` and its scaled adjoint
-``P^T / 4``, which is the full-weighting restriction.  Using an adjoint pair
-matters: it is what makes the coarse-grid correction a projection in the energy
-norm, and a mismatched pair degrades the convergence factor or destroys it.
+Las transferencias de malla son la interpolación bilineal ``P`` y su adjunta
+escalada ``P^T / 4``, que es la restricción de ponderación completa.  Usar un par
+adjunto importa: es lo que convierte la corrección en la malla gruesa en una
+proyección en la norma de energía, y un par mal emparejado degrada el factor de
+convergencia o lo destruye.
 
-Coarsening halves the number of interior points as ``m -> (m - 1) // 2``, so the
-coarse points sit exactly on odd fine points.  The relation is exact when the
-size is odd and approximate otherwise, which costs a little convergence on
-arbitrary image sizes.  :func:`solve` reports the observed convergence factor,
-and :mod:`gradient_domain.solvers` offers the cycle as a preconditioner for
-conjugate gradients, which is insensitive to that loss.
+El engrosamiento reduce a la mitad el número de puntos interiores como
+``m -> (m - 1) // 2``, de modo que los puntos gruesos caen exactamente sobre los
+puntos finos impares.  La relación es exacta cuando el tamaño es impar y
+aproximada en otro caso, lo que cuesta algo de convergencia con tamaños de imagen
+arbitrarios.  :func:`solve` informa del factor de convergencia observado, y
+:mod:`gradient_domain.solvers` ofrece el ciclo como precondicionador del
+gradiente conjugado, que es insensible a esa pérdida.
 """
 
 from __future__ import annotations
@@ -43,21 +45,22 @@ __all__ = ["MultigridOptions", "MultigridReport", "v_cycle", "solve"]
 
 @dataclass
 class MultigridOptions:
-    """Configuration of the solver.
+    """Configuración del solver.
 
     Attributes
     ----------
     pre_smoothing, post_smoothing : int
-        Gauss-Seidel sweeps before restriction and after interpolation.
+        Pasadas de Gauss-Seidel antes de restringir y después de interpolar.
     coarsest_size : int
-        Grids with fewer points than this along either axis are solved directly.
+        Las mallas con menos puntos que este valor en cualquiera de los dos ejes
+        se resuelven directamente.
     coarsest_sweeps : int
-        Sweeps used on the coarsest grid, which is small enough that relaxation
-        alone converges.
+        Pasadas usadas en la malla más gruesa, que es lo bastante pequeña como
+        para que la relajación sola converja.
     max_cycles : int
-        Upper bound on V-cycles.
+        Cota superior de ciclos V.
     tolerance : float
-        Target relative residual in the Euclidean norm.
+        Residuo relativo objetivo en norma euclídea.
     """
 
     pre_smoothing: int = 2
@@ -70,14 +73,14 @@ class MultigridOptions:
 
 @dataclass
 class MultigridReport:
-    """Convergence record of a solve.
+    """Registro de convergencia de una resolución.
 
     Attributes
     ----------
     residuals : list of float
-        Relative residual after each cycle, starting with the initial one.
+        Residuo relativo tras cada ciclo, empezando por el inicial.
     cycles : int
-        V-cycles performed.
+        Ciclos V realizados.
     converged : bool
     """
 
@@ -87,11 +90,11 @@ class MultigridReport:
 
     @property
     def convergence_factor(self) -> float:
-        """Geometric mean of the per-cycle residual reduction.
+        """Media geométrica de la reducción de residuo por ciclo.
 
-        Values around 0.1 are what a correctly assembled V-cycle achieves on the
-        Poisson problem; values close to 1 mean the coarse-grid correction is
-        not helping.
+        Valores en torno a 0.1 son lo que consigue un ciclo V bien montado sobre
+        el problema de Poisson; valores cercanos a 1 significan que la corrección
+        en la malla gruesa no está ayudando.
         """
         if len(self.residuals) < 2 or self.residuals[0] <= 0:
             return float("nan")
@@ -100,18 +103,18 @@ class MultigridReport:
 
     def __str__(self) -> str:
         return (
-            f"{self.cycles} cycles, relative residual {self.residuals[-1]:.2e}, "
-            f"convergence factor {self.convergence_factor:.3f}"
+            f"{self.cycles} ciclos, residuo relativo {self.residuals[-1]:.2e}, "
+            f"factor de convergencia {self.convergence_factor:.3f}"
         )
 
 
 @lru_cache(maxsize=64)
 def _prolongation_1d(fine: int, coarse: int) -> sp.csr_matrix:
-    """Linear interpolation from ``coarse`` to ``fine`` points along one axis.
+    """Interpolación lineal de puntos ``coarse`` a puntos ``fine`` en un eje.
 
-    Coarse point ``I`` lies on fine point ``2 I + 1``; the fine points between
-    them take the average of their two neighbours, and points outside the coarse
-    range see the homogeneous Dirichlet value of zero.
+    El punto grueso ``I`` cae sobre el punto fino ``2 I + 1``; los puntos finos
+    intermedios toman la media de sus dos vecinos, y los puntos fuera del rango
+    grueso ven el valor de Dirichlet homogéneo, que es cero.
     """
     rows, cols, values = [], [], []
     for index in range(fine):
@@ -142,13 +145,14 @@ def _coarse_shape(shape: tuple[int, int]) -> tuple[int, int]:
 
 
 def _smooth(u: np.ndarray, b: np.ndarray, spacing: float, sweeps: int) -> np.ndarray:
-    """Red-black Gauss-Seidel sweeps on ``laplacian(u) = b``.
+    """Pasadas de Gauss-Seidel rojo-negro sobre ``laplacian(u) = b``.
 
-    The two colours are updated in sequence, so the second half of each sweep
-    already sees the new values; that is what makes the scheme a Gauss-Seidel
-    rather than a Jacobi iteration, and it roughly doubles the smoothing rate.
-    Within a colour the updates are independent, which is what allows the whole
-    half-sweep to be one array expression.
+    Los dos colores se actualizan en secuencia, así que la segunda mitad de cada
+    pasada ya ve los valores nuevos; eso es lo que convierte el esquema en un
+    Gauss-Seidel en vez de en una iteración de Jacobi, y aproximadamente duplica
+    la tasa de suavizado.  Dentro de un color las actualizaciones son
+    independientes, que es lo que permite escribir la media pasada entera como
+    una sola expresión de arrays.
     """
     squared = spacing * spacing
     for _ in range(sweeps):
@@ -163,7 +167,7 @@ def _smooth(u: np.ndarray, b: np.ndarray, spacing: float, sweeps: int) -> np.nda
 
 
 def _restrict(residual: np.ndarray) -> np.ndarray:
-    """Full-weighting restriction, the scaled adjoint of :func:`_prolong`."""
+    """Restricción de ponderación completa, la adjunta escalada de :func:`_prolong`."""
     coarse_rows, coarse_cols = _coarse_shape(residual.shape)
     rows = _prolongation_1d(residual.shape[0], coarse_rows)
     cols = _prolongation_1d(residual.shape[1], coarse_cols)
@@ -171,7 +175,7 @@ def _restrict(residual: np.ndarray) -> np.ndarray:
 
 
 def _prolong(correction: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
-    """Bilinear interpolation of a coarse-grid correction."""
+    """Interpolación bilineal de una corrección de la malla gruesa."""
     rows = _prolongation_1d(shape[0], correction.shape[0])
     cols = _prolongation_1d(shape[1], correction.shape[1])
     return rows @ correction @ cols.T
@@ -180,22 +184,23 @@ def _prolong(correction: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
 def v_cycle(
     u: np.ndarray, b: np.ndarray, spacing: float, options: MultigridOptions
 ) -> np.ndarray:
-    """Apply one V-cycle to the system ``laplacian(u) = b``.
+    """Aplica un ciclo V al sistema ``laplacian(u) = b``.
 
     Parameters
     ----------
     u : ndarray, shape (m, n)
-        Current iterate; zeros are a valid starting point.
+        Iterado actual; los ceros son un punto de partida válido.
     b : ndarray, shape (m, n)
-        Right-hand side on the interior, with Dirichlet values already folded in.
+        Término independiente sobre el interior, con los valores de Dirichlet ya
+        plegados dentro.
     spacing : float
-        Grid spacing at this level.
+        Paso de malla en este nivel.
     options : MultigridOptions
 
     Returns
     -------
     ndarray
-        Improved iterate, same shape as ``u``.
+        Iterado mejorado, con la misma forma que ``u``.
     """
     coarse_shape = _coarse_shape(u.shape)
     if min(u.shape) <= options.coarsest_size or min(coarse_shape) < 2:
@@ -216,17 +221,17 @@ def solve(
     options: MultigridOptions | None = None,
     initial: np.ndarray | None = None,
 ) -> tuple[np.ndarray, MultigridReport]:
-    """Solve ``laplacian(u) = b`` by repeated V-cycles.
+    """Resuelve ``laplacian(u) = b`` mediante ciclos V repetidos.
 
     Parameters
     ----------
     b : ndarray, shape (m, n)
-        Right-hand side on the interior unknowns.
+        Término independiente sobre las incógnitas interiores.
     spacing : float
-        Grid spacing of the finest level.
-    options : MultigridOptions or None
-    initial : ndarray or None
-        Starting iterate; zeros when omitted.
+        Paso de malla del nivel más fino.
+    options : MultigridOptions o None
+    initial : ndarray o None
+        Iterado inicial; ceros si se omite.
 
     Returns
     -------
