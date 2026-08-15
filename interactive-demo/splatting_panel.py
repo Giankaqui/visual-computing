@@ -1,11 +1,11 @@
-"""Interactive panel for the trained Gaussian splatting model.
+"""Panel interactivo del modelo de Gaussian splatting entrenado.
 
-Every render here is a viewpoint the model was never trained on, and the same
-camera is also ray traced analytically, so the two panes are a direct
-side-by-side of the representation against the truth it was fitted to. Moving
-the sliders between the training viewpoints is where a splatting model shows its
-failure modes: silhouettes soften, and geometry that only ever appeared at a
-grazing angle turns into streaks.
+Cada render es un punto de vista con el que el modelo nunca se entrenó, y la
+misma cámara se traza además por rayos, así que los dos paneles son una
+comparación directa entre la representación y la verdad a la que se ajustó.
+Mover los sliders entre los puntos de vista de entrenamiento es donde un modelo
+de splatting enseña sus modos de fallo: las siluetas se ablandan y la geometría
+que solo apareció en ángulo rasante se convierte en estrías.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ _device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
 def _load_model() -> GaussianModel | None:
-    """Load the checkpoint once, keeping it resident between renders."""
+    """Carga el checkpoint una sola vez y lo mantiene residente entre renders."""
     global _model
     if _model is None and CHECKPOINT.exists():
         _model = GaussianModel.load(CHECKPOINT, device=_device)
@@ -47,7 +47,7 @@ def _camera(azimuth: float, elevation: float, distance: float, width: int) -> Ca
 
 
 def _depth_to_image(depth: np.ndarray) -> np.ndarray:
-    """Map a depth buffer to a viewable image, ignoring uncovered pixels."""
+    """Convierte un buffer de profundidad en algo visible, ignorando los píxeles vacíos."""
     covered = depth > 0
     if not covered.any():
         return np.zeros(depth.shape + (3,))
@@ -58,12 +58,12 @@ def _depth_to_image(depth: np.ndarray) -> np.ndarray:
 
 
 def _render(azimuth: float, elevation: float, distance: float, width: int, show_depth: bool):
-    """Render one viewpoint from the model and from the analytic scene."""
+    """Renderiza un punto de vista desde el modelo y desde la escena analítica."""
     model = _load_model()
     if model is None:
         message = (
-            f"**No checkpoint found at `{CHECKPOINT}`.**\n\n"
-            "Train one first:\n\n"
+            f"**No se ha encontrado ningún checkpoint en `{CHECKPOINT}`.**\n\n"
+            "Entrena uno primero:\n\n"
             "```bash\ngsplat train --scene synthetic --iterations 3500 "
             "--width 200 --height 150 --output out/\n```"
         )
@@ -91,40 +91,41 @@ def _render(azimuth: float, elevation: float, distance: float, width: int, show_
 
     summary = metric_table(
         [
-            ("PSNR against the ray tracer", f"{psnr(prediction, target):.2f} dB"),
+            ("PSNR contra el trazador de rayos", f"{psnr(prediction, target):.2f} dB"),
             ("SSIM", f"{float(ssim(prediction, target)):.4f}"),
-            ("Primitives in the model", f"{len(model):,}"),
-            ("Visible after culling", f"{result.output.visible_count:,}"),
-            ("Splatting", f"{1000 * render_seconds:.0f} ms on {_device}"),
-            ("Ray tracing the same view", f"{1000 * trace_seconds:.0f} ms on cpu"),
-            ("Tiles hitting the cap", f"{result.output.saturated_tiles}"),
+            ("Primitivas del modelo", f"{len(model):,}"),
+            ("Visibles tras el culling", f"{result.output.visible_count:,}"),
+            ("Splatting", f"{1000 * render_seconds:.0f} ms en {_device}"),
+            ("Trazar la misma vista", f"{1000 * trace_seconds:.0f} ms en cpu"),
+            ("Tiles que tocan el tope", f"{result.output.saturated_tiles}"),
         ]
     )
     return as_display_image(left), as_display_image(reference), summary
 
 
 def build() -> None:
-    """Add the panel to the enclosing Gradio layout."""
+    """Añade el panel al layout de Gradio que lo envuelve."""
     available = CHECKPOINT.exists()
     gr.Markdown(
-        "Move the camera anywhere on the orbit. The left pane is the fitted "
-        "Gaussian model, the right pane is the same view ray traced analytically. "
-        "Neither viewpoint was in the training set, so the difference between the "
-        "panes is generalization, not reconstruction error."
-        + ("" if available else "\n\n**No trained checkpoint is present.**")
+        "Mueve la cámara a cualquier punto de la órbita. El panel de la izquierda es "
+        "el modelo gaussiano ajustado, el de la derecha es la misma vista trazada por "
+        "rayos de forma analítica. Ninguno de estos puntos de vista estuvo en el "
+        "conjunto de entrenamiento, así que la diferencia entre ambos es "
+        "generalización, no error de ajuste."
+        + ("" if available else "\n\n**No hay ningún checkpoint entrenado.**")
     )
     defaults = (25.0, 22.0, 4.6, 280, False)
-    # Rendering once here gives the panel something to show the moment the page
-    # opens, which is cheaper and simpler than wiring a load event.
+    # Renderizar una vez aquí da al panel algo que enseñar en cuanto se abre la
+    # página, lo que es más simple y barato que cablear un evento de carga.
     initial_render, initial_reference, initial_summary = _render(*defaults)
 
     with gr.Row():
         with gr.Column(scale=1):
-            azimuth = gr.Slider(-180, 180, value=defaults[0], step=1, label="Azimuth (degrees)")
-            elevation = gr.Slider(-5, 60, value=defaults[1], step=1, label="Elevation (degrees)")
-            distance = gr.Slider(2.5, 9.0, value=defaults[2], step=0.1, label="Distance")
-            width = gr.Slider(160, 480, value=defaults[3], step=40, label="Render width (pixels)")
-            show_depth = gr.Checkbox(value=defaults[4], label="Show depth instead of colour")
+            azimuth = gr.Slider(-180, 180, value=defaults[0], step=1, label="Azimut (grados)")
+            elevation = gr.Slider(-5, 60, value=defaults[1], step=1, label="Elevación (grados)")
+            distance = gr.Slider(2.5, 9.0, value=defaults[2], step=0.1, label="Distancia")
+            width = gr.Slider(160, 480, value=defaults[3], step=40, label="Ancho del render (px)")
+            show_depth = gr.Checkbox(value=defaults[4], label="Ver profundidad en vez de color")
             summary = gr.Markdown(value=initial_summary)
         with gr.Column(scale=2):
             with gr.Row():
@@ -132,7 +133,7 @@ def build() -> None:
                     value=initial_render, label="Gaussian splatting", height=340
                 )
                 reference = gr.Image(
-                    value=initial_reference, label="Ray traced reference", height=340
+                    value=initial_reference, label="Referencia trazada por rayos", height=340
                 )
 
     controls = [azimuth, elevation, distance, width, show_depth]

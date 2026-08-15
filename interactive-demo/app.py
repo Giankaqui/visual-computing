@@ -1,11 +1,12 @@
-"""A browser interface for the three projects.
+"""Interfaz de navegador para los tres proyectos.
 
-The panels call the same library code the command line tools do; nothing here
-reimplements an algorithm or replays a cached result. Sliders that drive a
-computation of a few tens of milliseconds update directly, and the one that
-takes seconds sits behind a button.
+Los paneles llaman al mismo código de librería que usan las herramientas de línea
+de comandos; aquí no se reimplementa ningún algoritmo ni se reproduce un
+resultado cacheado. Los sliders que disparan un cálculo de decenas de
+milisegundos actualizan directamente, y el que tarda segundos vive detrás de un
+botón.
 
-Run with ``python app.py`` and open the address it prints.
+Se lanza con ``python app.py`` y se abre en la dirección que imprime.
 """
 
 from __future__ import annotations
@@ -21,39 +22,39 @@ import splatting_panel
 THEME = gr.themes.Soft(primary_hue="blue", neutral_hue="slate")
 
 INTRODUCTION = """
-# Visual Computing Projects
+# Proyectos de Computación Visual
 
-Three projects, each driven here by the same code the command line runs.
+Tres proyectos, cada uno movido aquí por el mismo código que corre la línea de comandos.
 
-| Tab | What you are changing |
+| Pestaña | Qué estás cambiando |
 | --- | --- |
-| Structure from motion | Measurement noise and the fraction of wrong correspondences |
-| Gaussian splatting | The viewpoint, against a ray-traced reference |
-| Gradient domain | Guidance fields, solvers and attenuation exponents |
+| Structure from motion | El ruido de medida y la fracción de correspondencias erróneas |
+| Gaussian splatting | El punto de vista, contra una referencia trazada por rayos |
+| Dominio del gradiente | Campos guía, solvers y exponentes de atenuación |
 """
 
 
 def build_interface() -> gr.Blocks:
-    """Assemble the three panels into one page."""
-    with gr.Blocks(title="Visual Computing Projects") as interface:
+    """Monta los tres paneles en una sola página."""
+    with gr.Blocks(title="Proyectos de Computación Visual") as interface:
         gr.Markdown(INTRODUCTION)
         with gr.Tab("Structure from motion"):
             reconstruction_panel.build()
         with gr.Tab("Gaussian splatting"):
             splatting_panel.build()
-        with gr.Tab("Gradient domain"):
+        with gr.Tab("Dominio del gradiente"):
             gradient_panel.build()
     return interface
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=7860, help="port to serve on")
+    parser.add_argument("--port", type=int, default=7860, help="puerto en el que servir")
     parser.add_argument(
-        "--share", action="store_true", help="expose a temporary public URL through Gradio"
+        "--share", action="store_true", help="expone una URL pública temporal a través de Gradio"
     )
     parser.add_argument(
-        "--no-browser", action="store_true", help="do not open a browser window on start"
+        "--no-browser", action="store_true", help="no abrir una ventana del navegador al arrancar"
     )
     args = parser.parse_args()
 

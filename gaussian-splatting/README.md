@@ -1,267 +1,285 @@
 # 3D Gaussian Splatting
 
-A differentiable renderer that represents a scene as a set of anisotropic 3D
-Gaussians and fits them to posed images by gradient descent. Written entirely in
-PyTorch: the EWA projection, the tile-based rasterizer, the spherical harmonic
-colour model and the adaptive density control are all here, and the backward
-pass comes from autograd rather than from a hand-written CUDA kernel.
+Un renderizador diferenciable que representa una escena como un conjunto de
+gaussianas 3D anisótropas y las ajusta a imágenes con pose conocida por descenso
+de gradiente. Escrito enteramente en PyTorch: la proyección EWA, el rasterizador
+por tiles, el modelo de color con armónicos esféricos y el control adaptativo de
+densidad están todos aquí, y la pasada hacia atrás sale de autograd y no de un
+kernel CUDA escrito a mano.
 
-![Novel views and their depth](docs/turntable.png)
+![Vistas nuevas y su profundidad](docs/turntable.png)
 
-*Novel viewpoints, interleaved between the training cameras, with the
-alpha-weighted depth below each.*
+*Puntos de vista nuevos, intercalados entre las cámaras de entrenamiento, con la
+profundidad ponderada por alfa debajo de cada uno.*
 
-## How it works
+## Cómo funciona
 
-A primitive is a 3D Gaussian with a mean, an anisotropic covariance, an opacity
-and a spherical harmonic expansion for view-dependent colour. Rendering it is
-four steps.
+Una primitiva es una gaussiana 3D con una media, una covarianza anisótropa, una
+opacidad y un desarrollo en armónicos esféricos para el color dependiente de la
+vista. Renderizarla son cuatro pasos.
 
-**Project.** A perspective projection is not affine, so the image of a Gaussian
-is not a Gaussian. EWA splatting linearizes the projection at each centre and
-pushes the covariance through that linear map, `Σ₂ᴅ = J W Σ Wᵀ Jᵀ`. The
-approximation is good while a primitive subtends a small angle, which is the
-regime the representation operates in.
+**Proyectar.** Una proyección en perspectiva no es afín, así que la imagen de una
+gaussiana no es una gaussiana. EWA splatting linealiza la proyección en cada
+centro y empuja la covarianza a través de esa aplicación lineal,
+`Σ₂ᴅ = J W Σ Wᵀ Jᵀ`. La aproximación es buena mientras una primitiva subtiende un
+ángulo pequeño, que es el régimen en el que opera la representación.
 
-**Bin.** Compositing every primitive against every pixel costs `O(H·W·N)`. The
-image is split into tiles instead, and each primitive is assigned to the tiles
-its support overlaps, so the work becomes proportional to covered screen area.
+**Agrupar.** Componer cada primitiva contra cada píxel cuesta `O(H·W·N)`. En vez
+de eso la imagen se parte en tiles y cada primitiva se asigna a los tiles que su
+soporte solapa, con lo que el trabajo pasa a ser proporcional al área de pantalla
+cubierta.
 
-**Composite.** Within a tile the primitives are depth sorted and blended front to
-back, `C = Σᵢ cᵢ αᵢ Πⱼ<ᵢ (1 − αⱼ)`. The transmittance product looks sequential,
-but it is a cumulative product along the depth axis, so a tile evaluates as a
-handful of batched tensor operations that autograd differentiates directly. The
-gradients are verified against central differences in the tests.
+**Componer.** Dentro de un tile las primitivas se ordenan por profundidad y se
+mezclan de delante hacia atrás, `C = Σᵢ cᵢ αᵢ Πⱼ<ᵢ (1 − αⱼ)`. El producto de
+transmitancia parece secuencial, pero es un producto acumulado a lo largo del eje
+de profundidad, así que un tile se evalúa como un puñado de operaciones tensoriales
+por lotes que autograd diferencia directamente. Los gradientes se verifican contra
+diferencias centradas en los tests.
 
-**Densify.** Gradient descent can move, resize and recolour primitives but cannot
-change how many there are. Where the model is under-parameterized, a primitive's
-projected centre receives a large and persistent gradient, because one splat is
-being pulled towards several image features at once. Small primitives with a
-large accumulated gradient are cloned; large ones are split into children drawn
-from their own distribution.
+**Densificar.** El descenso de gradiente puede mover, redimensionar y recolorear
+primitivas, pero no puede cambiar cuántas hay. Donde el modelo está
+infraparametrizado, el centro proyectado de una primitiva recibe un gradiente
+grande y persistente, porque un solo splat está siendo estirado hacia varias
+características de la imagen a la vez. Las primitivas pequeñas con gradiente
+acumulado grande se clonan; las grandes se dividen en hijas muestreadas de su
+propia distribución.
 
-## Parameterization
+## Parametrización
 
-Every constrained quantity is stored through an unconstrained parameterization,
-so gradient descent never has to be projected back onto a feasible set.
+Toda magnitud con rango restringido se almacena mediante una parametrización sin
+restricciones, de modo que el descenso de gradiente nunca tiene que proyectarse de
+vuelta a un conjunto factible.
 
-| Quantity | Stored as | Recovered by |
+| Magnitud | Se guarda como | Se recupera con |
 | --- | --- | --- |
-| scale | logarithm | `exp` |
-| opacity | logit | `sigmoid` |
-| rotation | unnormalized quaternion | normalize, then to a matrix |
-| covariance | scale and rotation | `R S Sᵀ Rᵀ` |
-| colour | spherical harmonic coefficients | evaluate along the view direction |
+| escala | logaritmo | `exp` |
+| opacidad | logit | `sigmoid` |
+| rotación | cuaternión sin normalizar | normalizar y pasar a matriz |
+| covarianza | escala y rotación | `R S Sᵀ Rᵀ` |
+| color | coeficientes de armónicos esféricos | evaluar en la dirección de vista |
 
-Factoring the covariance rather than storing six free coefficients is what keeps
-it positive semidefinite throughout optimization; an unconstrained symmetric
-matrix drifts indefinite within a few hundred steps, and the screen-space conic
-then has no interior.
+Factorizar la covarianza en lugar de guardar seis coeficientes libres es lo que
+la mantiene semidefinida positiva durante toda la optimización; una matriz
+simétrica sin restricciones se vuelve indefinida en unos cientos de pasos, y
+entonces la cónica en pantalla no tiene interior.
 
-## Implementation notes worth reading
+## Notas de implementación que merece la pena leer
 
-### The per-tile cap, and the artefact it causes
+### El tope por tile y el artefacto que provoca
 
-The dense compositing intermediate holds one entry per (tile, primitive, pixel)
-triple, so its size is the pixel count times the occupancy of the busiest tile.
-That occupancy is data dependent and unbounded, so it is capped after the depth
-sort, keeping the nearest primitives.
+El intermedio denso de composición guarda una entrada por cada terna (tile,
+primitiva, píxel), así que su tamaño es el número de píxeles por la ocupación del
+tile más cargado. Esa ocupación depende de los datos y no está acotada, así que se
+limita después de ordenar por profundidad, quedándose con las primitivas más
+cercanas.
 
-The cap is usually free, because once transmittance is spent the remaining
-primitives cannot change the pixel. When it is *not* free the failure is
-distinctive and easy to misread as a training problem: neighbouring tiles
-truncate different numbers of primitives, and the render acquires visible
-rectangular steps. This is what it looks like, at a cap of 512 on a model whose
-busiest tile held 1499 primitives:
+El tope suele salir gratis, porque una vez gastada la transmitancia las
+primitivas restantes no pueden cambiar el píxel. Cuando *no* sale gratis el fallo
+es característico y fácil de confundir con un problema de entrenamiento: tiles
+vecinos truncan números distintos de primitivas y el render adquiere escalones
+rectangulares visibles. Así se ve, con un tope de 512 sobre un modelo cuyo tile
+más cargado tenía 1499 primitivas:
 
-| cap | saturated tiles | unspent transmittance | PSNR vs. untruncated |
+| tope | tiles saturados | transmitancia sin gastar | PSNR frente a sin truncar |
 | ---: | ---: | ---: | ---: |
-| 512 | 87 of 130 | 0.199 | 21.3 dB |
-| 1024 | 27 of 130 | 0.032 | 43.5 dB |
-| 2048 | 0 | 0.000 | exact |
+| 512 | 87 de 130 | 0.199 | 21.3 dB |
+| 1024 | 27 de 130 | 0.032 | 43.5 dB |
+| 2048 | 0 | 0.000 | exacto |
 
-`RenderOutput` reports both quantities and the trainer prints a warning the first
-time the unspent transmittance exceeds one percent, which turns an assumption
-into a measurement.
+`RenderOutput` informa de ambas magnitudes y el entrenador imprime un aviso la
+primera vez que la transmitancia sin gastar supera el uno por ciento, lo que
+convierte una suposición en una medida.
 
-Tile size is a related and non-obvious trade-off. Dense work is the pixel count
-times the busiest tile's occupancy; halving the tile side roughly halves that
-occupancy and leaves the pixel count alone, while the number of primitive-tile
-pairs to sort grows. Eight pixels is where the two balance for these scenes:
+El tamaño de tile es un compromiso relacionado y poco evidente. El trabajo denso
+es el número de píxeles por la ocupación del tile más cargado; partir por la mitad
+el lado del tile aproximadamente parte por la mitad esa ocupación y deja el número
+de píxeles igual, mientras que lo que crece es el número de pares primitiva-tile
+que hay que ordenar. Ocho píxeles es donde se equilibran ambos efectos para estas
+escenas:
 
-| tile | tiles | primitive-tile pairs | busiest tile | dense elements | render |
+| tile | tiles | pares primitiva-tile | tile más cargado | elementos densos | render |
 | ---: | ---: | ---: | ---: | ---: | ---: |
 | 4 | 1 900 | 718 483 | 886 | 26.9 M | 328 ms |
 | 8 | 475 | 220 320 | 1 096 | 33.3 M | 242 ms |
 | 16 | 130 | 85 035 | 1 499 | 49.9 M | 315 ms |
 | 32 | 35 | 40 061 | 2 755 | 98.7 M | 924 ms |
 
-### Activation checkpointing
+### Checkpointing de activaciones
 
-Tiles are composited in chunks sized to a fixed element budget, and under
-gradient each chunk is wrapped in `torch.utils.checkpoint`. Peak memory then
-depends on the budget rather than on the image size, at the cost of recomputing
-each chunk's forward pass during the backward pass. At 400 × 300 with 40 000
-primitives on CPU:
+Los tiles se componen por bloques dimensionados a un presupuesto fijo de
+elementos, y bajo gradiente cada bloque se envuelve en
+`torch.utils.checkpoint`. El pico de memoria pasa entonces a depender del
+presupuesto y no del tamaño de imagen, a cambio de recalcular la pasada hacia
+delante de cada bloque durante la pasada hacia atrás. A 400 × 300 con 40 000
+primitivas en CPU:
 
-| checkpointing | peak resident memory |
+| checkpointing | pico de memoria residente |
 | --- | ---: |
-| off | 6.7 GB |
-| on | 3.2 GB |
+| desactivado | 6.7 GB |
+| activado | 3.2 GB |
 
-The tests assert that the gradients are identical either way.
+Los tests comprueban que los gradientes son idénticos en ambos casos.
 
-### Optimizer surgery
+### Cirugía sobre el optimizador
 
-Densification changes the number of rows in every parameter tensor, so Adam's
-first and second moment estimates have to be reindexed in step with them.
-Dropping the state instead would restart the moment estimates for every
-surviving primitive and visibly stall training after each pass. The helpers in
-[densify.py](src/gsplat/densify.py) slice the moments for survivors and pad
-zeros for newcomers, and the tests check both directly.
+La densificación cambia el número de filas de cada tensor de parámetros, así que
+las estimaciones de primer y segundo momento de Adam hay que reindexarlas a la
+vez. Tirar ese estado reiniciaría los momentos de todas las primitivas
+supervivientes y estancaría el entrenamiento de forma visible tras cada pasada.
+Las utilidades de [densify.py](src/gsplat/densify.py) recortan los momentos para
+las supervivientes y rellenan con ceros para las nuevas, y los tests comprueban
+ambas cosas directamente.
 
-### A ceiling on the model size
+### Un techo para el tamaño del modelo
 
-The screen-space gradient threshold does not bound the model. It is a property
-of the image resolution and the scene, so a value that produces a reasonable
-model at one megapixel produces a wildly over-parameterized one at a tenth of
-that. On this benchmark at 160 × 120, the published threshold of `2e-4` grew the
-model to 110 751 primitives and held-out PSNR *fell* from 15.1 dB at iteration
-1 000 to 11.4 dB at 6 000, with a five-decibel gap to the training views: the
-classic signature of memorizing them. Raising the threshold and adding an
-explicit ceiling closes the gap to a few tenths of a decibel. Growth stops at the
-ceiling while pruning continues, so the model keeps improving by replacing
-primitives rather than by adding them.
+El umbral de gradiente en pantalla no acota el modelo. Es una propiedad de la
+resolución de imagen y de la escena, así que un valor que produce un modelo
+razonable a un megapíxel produce uno desaforadamente sobreparametrizado a una
+décima parte. En este banco de pruebas a 160 × 120, el umbral publicado de `2e-4`
+hizo crecer el modelo hasta 110 751 primitivas y el PSNR en vistas retenidas
+*bajó* de 15.1 dB en la iteración 1 000 a 11.4 dB en la 6 000, con cinco
+decibelios de diferencia respecto a las vistas de entrenamiento: la firma clásica
+de estar memorizándolas. Subir el umbral y añadir un techo explícito reduce esa
+diferencia a unas décimas de decibelio. El crecimiento se detiene en el techo
+mientras la poda sigue activa, así que el modelo sigue mejorando reemplazando
+primitivas en vez de añadiéndolas.
 
-## Results
+## Resultados
 
-The benchmark scene is three spheres of different sizes and finishes on a
-mottled stone floor, ray traced analytically so the poses are exact. Specular
-highlights sweep across the spheres as the camera orbits, which only a
-view-dependent colour model can reproduce; the floor carries aperiodic detail at
-several scales, which is what forces the density control to split; and the cast
-shadows are radiance discontinuities not aligned with any surface.
+La escena de referencia son tres esferas de distinto tamaño y acabado sobre un
+suelo de piedra jaspeada, trazada por rayos de forma analítica para que las poses
+sean exactas. Los reflejos especulares barren las esferas conforme la cámara
+orbita, cosa que solo puede reproducir un modelo de color dependiente de la
+vista; el suelo lleva detalle aperiódico a varias escalas, que es lo que obliga al
+control de densidad a dividir; y las sombras proyectadas son discontinuidades de
+radiancia que no están alineadas con ninguna superficie.
 
-Forty training views on an orbit, eight held-out views interleaved half a step
-between them, at 200 × 150. The model starts from 10 000 primitives placed
-uniformly in a ball, with no point cloud to initialize from.
+Cuarenta vistas de entrenamiento sobre una órbita, ocho vistas retenidas
+intercaladas a medio paso entre ellas, a 200 × 150. El modelo arranca con 10 000
+primitivas colocadas uniformemente en una bola, sin nube de puntos con la que
+inicializarse.
 
 | | PSNR | SSIM |
 | --- | ---: | ---: |
-| Training views (40) | 24.74 dB | 0.9280 |
-| Held-out views (8) | **24.23 dB** | **0.9072** |
+| Vistas de entrenamiento (40) | 24.74 dB | 0.9280 |
+| Vistas retenidas (8) | **24.23 dB** | **0.9072** |
 
-30 950 primitives after 3 500 iterations, 1 237 seconds on Metal.
+30 950 primitivas tras 3 500 iteraciones, 1 237 segundos sobre Metal.
 
-The half-decibel gap between the two rows is the number to look at. It says the
-model is representing the scene rather than memorizing the forty images it was
-shown, which is exactly what the earlier configuration failed to do.
+La diferencia de medio decibelio entre las dos filas es el dato que hay que
+mirar. Dice que el modelo está representando la escena en vez de memorizar las
+cuarenta imágenes que se le enseñaron, que es exactamente lo que la configuración
+anterior no conseguía.
 
-![Training curves](docs/training.png)
+![Curvas de entrenamiento](docs/training.png)
 
-Held-out quality rises monotonically throughout. The primitive count drops from
-10 000 to 4 833 on the first pruning pass, which removes the random
-initialization that explains nothing, then grows under densification until the
-window closes at iteration 2 100 and freezes at 30 950.
+La calidad en vistas retenidas sube de forma monótona en todo el recorrido. El
+número de primitivas cae de 10 000 a 4 833 en la primera pasada de poda, que
+elimina la inicialización aleatoria que no explica nada, y luego crece bajo
+densificación hasta que la ventana se cierra en la iteración 2 100 y se congela
+en 30 950.
 
-![Reference, render and error](docs/comparison.png)
+![Referencia, render y error](docs/comparison.png)
 
-The residual error concentrates in two places: object silhouettes, where a
-finite number of Gaussians cannot produce a step edge, and the far floor at
-grazing incidence, where a pixel covers a large and foreshortened patch of
-texture.
+El error residual se concentra en dos sitios: las siluetas de los objetos, donde
+un número finito de gaussianas no puede producir un escalón, y el suelo lejano en
+incidencia rasante, donde un píxel cubre una porción grande y escorzada de
+textura.
 
-Reproduce with
+Para reproducirlo:
 
 ```bash
 gsplat train --scene synthetic --iterations 3500 --width 200 --height 150 \
              --init random --random-points 10000 --output out/
 ```
 
-## Usage
+## Uso
 
 ```bash
 pip install -e gaussian-splatting
 ```
 
-Fit the procedural scene:
+Ajustar la escena procedural:
 
 ```bash
 gsplat train --scene synthetic --output out/ --device auto
 ```
 
-Fit a reconstruction from the [structure-from-motion](../structure-from-motion)
-project, initializing from its sparse point cloud:
+Ajustar una reconstrucción del proyecto de
+[structure-from-motion](../structure-from-motion), inicializando desde su nube
+dispersa:
 
 ```bash
-sfm reconstruct photos/ --output scene/
-gsplat train --scene scene/ --images photos/ --output out/
+sfm reconstruct fotos/ --output escena/
+gsplat train --scene escena/ --images fotos/ --output out/
 ```
 
-Render novel views from a checkpoint:
+Renderizar vistas nuevas desde un checkpoint:
 
 ```bash
 gsplat render out/model.npz --output turntable.png --views 6 --width 320
 ```
 
-Write the procedural scene out as images and poses, which is what the
-reconstruction pipeline consumes:
+Volcar la escena procedural como imágenes y poses, que es lo que consume el
+pipeline de reconstrucción:
 
 ```bash
-gsplat export --output scene/ --views 24
+gsplat export --output escena/ --views 24
 ```
 
-`--device auto` selects Metal on Apple silicon, CUDA where available, and CPU
-otherwise. Metal is roughly twice as fast as CPU on this workload.
+`--device auto` elige Metal en Apple silicon, CUDA donde esté disponible y CPU en
+otro caso. Metal va aproximadamente el doble de rápido que CPU en esta carga.
 
-## Layout
+## Estructura
 
 ```
 src/gsplat/
-  spherical_harmonics.py  real basis up to degree three
-  cameras.py              pinhole cameras, look-at, orbits
-  gaussians.py            the model and its parameterization
-  projection.py           EWA projection to screen-space conics
-  rasterizer.py           tile binning, depth sort, differentiable compositing
-  renderer.py             model and camera to image, in one call
-  losses.py               L1, differentiable SSIM, PSNR
-  densify.py              adaptive density control and optimizer surgery
-  trainer.py              the optimization loop and its schedules
-  scenes.py               the analytic ray tracer and its procedural texture
-  datasets.py             procedural and on-disk datasets
-  visualize.py            comparison, curve and turntable figures
-  cli.py                  command line interface
-tests/                    55 tests, about half a minute
+  spherical_harmonics.py  base real hasta grado tres
+  cameras.py              cámaras pinhole, look-at, órbitas
+  gaussians.py            el modelo y su parametrización
+  projection.py           proyección EWA a cónicas en pantalla
+  rasterizer.py           agrupado por tiles, orden por profundidad, composición diferenciable
+  renderer.py             de modelo y cámara a imagen, en una llamada
+  losses.py               L1, SSIM diferenciable, PSNR
+  densify.py              control adaptativo de densidad y cirugía sobre el optimizador
+  trainer.py              el bucle de optimización y sus planificaciones
+  scenes.py               el trazador de rayos analítico y su textura procedural
+  datasets.py             conjuntos de datos procedurales y en disco
+  visualize.py            figuras de comparación, curvas y vueltas de cámara
+  cli.py                  interfaz de línea de comandos
+tests/                    55 tests, alrededor de medio minuto
 ```
 
-## Scope
+## Alcance
 
-The rasterizer is written for clarity and portability, not for speed. A CUDA
-kernel with a hand-written backward pass is one to two orders of magnitude
-faster, and that is the right choice for scenes of millions of primitives at
-megapixel resolution. What this implementation buys instead is a compositing
-pass that is a dozen lines of tensor algebra, runs unchanged on CPU, Metal and
-CUDA, and is checked against numerical differentiation.
+El rasterizador está escrito buscando claridad y portabilidad, no velocidad. Un
+kernel CUDA con pasada hacia atrás escrita a mano es uno o dos órdenes de
+magnitud más rápido, y es la elección correcta para escenas de millones de
+primitivas a resolución de megapíxel. Lo que compra esta implementación a cambio
+es una pasada de composición que son una docena de líneas de álgebra tensorial,
+corre sin cambios en CPU, Metal y CUDA, y está contrastada con diferenciación
+numérica.
 
-Camera poses are held fixed; joint refinement of poses and geometry is not
-implemented. Primitives beyond the per-tile cap are dropped rather than composited
-into a background approximation. Exposure and white balance are assumed constant
-across views, which is true of rendered data and rarely true of a real capture.
+Las poses de cámara quedan fijas; el refinamiento conjunto de poses y geometría
+no está implementado. Las primitivas que exceden el tope por tile se descartan en
+vez de componerse en una aproximación de fondo. Se supone exposición y balance de
+blancos constantes entre vistas, lo cual es cierto en datos renderizados y rara
+vez lo es en una captura real.
 
-The procedural scene is a novel-view benchmark, not a feature-matching one. Three
-smooth specular spheres over a ground plane, viewed from a full orbit, give SIFT
-very little to work with: the spheres' appearance is view dependent, the floor is
-seen at grazing angles that change sharply between views, and the background is
-empty. A reconstruction from these renders registers only a fraction of the
-views, which says something about the images rather than about the pipeline. The
-handover between the two projects is a file interface, exercised by the tests and
-by the `--scene <directory>` path above; demonstrating the full chain end to end
-wants a real capture.
+La escena procedural es un banco de pruebas de síntesis de vistas, no de
+emparejamiento de características. Tres esferas especulares lisas sobre un plano
+de suelo, vistas desde una órbita completa, le dan muy poco a SIFT: la apariencia
+de las esferas depende de la vista, el suelo se ve en ángulos rasantes que cambian
+bruscamente entre vistas, y el fondo está vacío. Una reconstrucción hecha con
+estos renders registra solo una fracción de las vistas, lo cual dice algo de las
+imágenes y no del pipeline. El relevo entre los dos proyectos es una interfaz de
+ficheros, ejercitada por los tests y por la vía `--scene <directorio>` de arriba;
+demostrar la cadena completa de punta a punta pide una captura real.
 
-## References
+## Referencias
 
-* Kerbl, Kopanas, Leimkühler and Drettakis, *3D Gaussian Splatting for Real-Time Radiance Field Rendering*, SIGGRAPH 2023.
-* Zwicker, Pfister, van Baar and Gross, *EWA Volume Splatting*, IEEE Visualization 2001.
-* Mildenhall, Srinivasan, Tancik, Barron, Ramamoorthi and Ng, *NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis*, ECCV 2020.
-* Wang, Bovik, Sheikh and Simoncelli, *Image Quality Assessment: From Error Visibility to Structural Similarity*, TIP 2004.
-* Chen and Wang, *A Survey on 3D Gaussian Splatting*, 2024.
+* Kerbl, Kopanas, Leimkühler y Drettakis, *3D Gaussian Splatting for Real-Time Radiance Field Rendering*, SIGGRAPH 2023.
+* Zwicker, Pfister, van Baar y Gross, *EWA Volume Splatting*, IEEE Visualization 2001.
+* Mildenhall, Srinivasan, Tancik, Barron, Ramamoorthi y Ng, *NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis*, ECCV 2020.
+* Wang, Bovik, Sheikh y Simoncelli, *Image Quality Assessment: From Error Visibility to Structural Similarity*, TIP 2004.
+* Chen y Wang, *A Survey on 3D Gaussian Splatting*, 2024.

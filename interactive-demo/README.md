@@ -1,12 +1,12 @@
-# Interactive Demo
+# Demo Interactiva
 
-A browser interface for the three projects. Every panel calls the same library
-code the command line tools do, so what you see is the real pipeline running on
-your machine, not a recording of one.
+Una interfaz de navegador para los tres proyectos. Cada panel llama al mismo
+código de librería que usan las herramientas de línea de comandos, así que lo que
+ves es el pipeline real corriendo en tu máquina, no una grabación de uno.
 
-## Running it
+## Cómo lanzarla
 
-From the repository root, with the three projects installed:
+Desde la raíz del repositorio, con los tres proyectos instalados:
 
 ```bash
 pip install -e structure-from-motion -e gaussian-splatting -e gradient-domain
@@ -15,53 +15,53 @@ pip install -r interactive-demo/requirements.txt
 python interactive-demo/app.py
 ```
 
-It opens at `http://127.0.0.1:7860`. Add `--share` for a temporary public URL,
-`--port` to move it, `--no-browser` to keep it from opening a window.
+Se abre en `http://127.0.0.1:7860`. Añade `--share` para una URL pública
+temporal, `--port` para moverla y `--no-browser` para que no abra una ventana.
 
-The Gaussian splatting panel needs a trained checkpoint at
-`gaussian-splatting/docs/model.npz`. If it is missing, that panel says so and
-tells you the command to produce one; the other two work regardless.
+El panel de Gaussian splatting necesita un checkpoint entrenado en
+`gaussian-splatting/docs/model.npz`. Si falta, ese panel lo dice y muestra el
+comando que lo produce; los otros dos funcionan igualmente.
 
-## What each panel does
+## Qué hace cada panel
 
-**Structure from motion.** Generates a synthetic scene with known ground truth,
-reconstructs it, and reports the error against that truth. The two controls that
-matter are the measurement noise and the fraction of gross outliers: raise
-either and you can watch the five-point solver, the robust estimators and the
-bundle adjuster degrade in a specific order. The 3D view is orbitable, so the
-camera trajectory and the recovered structure can be inspected from any angle.
-A run takes a few seconds, so it sits behind a button.
+**Structure from motion.** Genera una escena sintética con verdad conocida, la
+reconstruye e informa del error contra esa verdad. Los dos controles que importan
+son el ruido de medida y la fracción de outliers groseros: sube cualquiera de los
+dos y puedes ver degradarse en un orden concreto al solver de cinco puntos, los
+estimadores robustos y el bundle adjuster. La vista 3D se puede orbitar, así que
+la trayectoria de cámaras y la estructura recuperada se inspeccionan desde
+cualquier ángulo. Una pasada tarda unos segundos, así que vive detrás de un botón.
 
-**Gaussian splatting.** Renders the trained model from any viewpoint on the
-orbit and ray traces the same camera analytically beside it. Neither viewpoint
-was in the training set, so the difference between the two panes is
-generalization rather than fit. Push the elevation to its extremes, where no
-training camera ever went, and the representation starts to come apart in the
-way splatting models do. Each render takes a fraction of a second, so the view
-follows the sliders.
+**Gaussian splatting.** Renderiza el modelo entrenado desde cualquier punto de
+vista de la órbita y traza por rayos la misma cámara al lado. Ninguno de los dos
+puntos de vista estuvo en el conjunto de entrenamiento, así que la diferencia
+entre los dos paneles es generalización y no ajuste. Lleva la elevación a sus
+extremos, donde no llegó ninguna cámara de entrenamiento, y la representación
+empieza a descomponerse como lo hacen los modelos de splatting. Cada render tarda
+una fracción de segundo, así que la vista sigue a los sliders.
 
-**Gradient domain.** Four operations across four sub-tabs: seamless cloning,
-tone mapping, texture flattening and local contrast. Each solve is tens of
-milliseconds, so the result follows the controls directly. Two things are worth
-sweeping: the tone-mapping exponent, whose convention runs backwards from the
-obvious one, and the choice of solver on the rectangle domain, where the
-iteration counts of conjugate gradients and the multigrid variants are printed
-side by side.
+**Dominio del gradiente.** Cuatro operaciones repartidas en cuatro sub-pestañas:
+clonado sin costura, mapeo tonal, aplanado de textura y contraste local. Cada
+resolución son decenas de milisegundos, así que el resultado sigue a los controles
+directamente. Dos cosas merecen un barrido: el exponente del mapeo tonal, cuyo
+convenio va al revés del que uno esperaría, y la elección de solver en el dominio
+rectángulo, donde los conteos de iteraciones del gradiente conjugado y de las
+variantes multigrid se imprimen uno al lado del otro.
 
-## Layout
+## Estructura
 
 ```
 interactive-demo/
-  app.py                   assembles the three tabs
-  common.py                image conversion, metric tables, camera placement
-  reconstruction_panel.py  structure from motion, with an orbitable 3D view
-  splatting_panel.py       novel views against a ray-traced reference
-  gradient_panel.py        the four gradient-domain operations
+  app.py                   monta las tres pestañas
+  common.py                conversión de imágenes, tablas de métricas, colocación de cámara
+  reconstruction_panel.py  structure from motion, con una vista 3D orbitable
+  splatting_panel.py       vistas nuevas contra una referencia trazada por rayos
+  gradient_panel.py        las cuatro operaciones de dominio del gradiente
 ```
 
-## Scope
+## Alcance
 
-This is a demonstration surface, not part of any of the three packages: nothing
-here is imported by them, and none of it is covered by their tests. It is
-deliberately single-user and single-process, so two people pointing a browser at
-the same instance will queue behind each other on the GPU.
+Esto es una superficie de demostración, no parte de ninguno de los tres paquetes:
+nada de aquí lo importan ellos, y nada de esto está cubierto por sus tests. Es
+deliberadamente monousuario y de un solo proceso, así que dos personas apuntando
+el navegador a la misma instancia harán cola en la GPU.

@@ -1,9 +1,9 @@
-"""Interactive panel for the structure-from-motion pipeline.
+"""Panel interactivo del pipeline de structure from motion.
 
-The controls expose the two things that decide whether a reconstruction
-succeeds: how much noise corrupts each measurement, and what fraction of the
-correspondences are wrong outright.  Running the same scene at several settings
-is the quickest way to see where the robust estimators stop coping.
+Los controles exponen las dos cosas que deciden si una reconstrucción sale bien:
+cuánto ruido corrompe cada medida y qué fracción de las correspondencias es
+directamente errónea. Correr la misma escena con varios ajustes es la forma más
+rápida de ver dónde dejan de aguantar los estimadores robustos.
 """
 
 from __future__ import annotations
@@ -26,13 +26,13 @@ _CAMERA_COLOR = "#d1495b"
 
 
 def _to_display_frame(points: np.ndarray) -> np.ndarray:
-    """Map world coordinates to an upright plotting frame."""
+    """Lleva coordenadas de mundo a un sistema de dibujo con el eje vertical arriba."""
     points = np.asarray(points, dtype=float).reshape(-1, 3)
     return np.stack([points[:, 0], points[:, 2], -points[:, 1]], axis=1)
 
 
 def _frustum_polyline(pose: Pose, camera: PinholeCamera, scale: float) -> np.ndarray:
-    """A single polyline through the frustum corners and the camera centre."""
+    """Una sola polilínea que recorre las esquinas del frustum y el centro de la cámara."""
     corners_pixel = np.array(
         [[0.0, 0.0], [camera.width, 0.0], [camera.width, camera.height], [0.0, camera.height]]
     )
@@ -42,7 +42,7 @@ def _frustum_polyline(pose: Pose, camera: PinholeCamera, scale: float) -> np.nda
 
 
 def _scene_figure(model: Reconstruction) -> go.Figure:
-    """Build an orbitable 3D view of the reconstruction."""
+    """Construye una vista 3D de la reconstrucción que se puede orbitar."""
     points, _ = model.point_cloud()
     display = _to_display_frame(points)
     extent = float(np.linalg.norm(points.max(axis=0) - points.min(axis=0)))
@@ -53,7 +53,7 @@ def _scene_figure(model: Reconstruction) -> go.Figure:
             x=display[:, 0], y=display[:, 1], z=display[:, 2],
             mode="markers",
             marker={"size": 1.6, "color": display[:, 2], "colorscale": "Viridis", "opacity": 0.9},
-            name=f"{len(points)} points",
+            name=f"{len(points)} puntos",
             hoverinfo="skip",
         )
     )
@@ -66,7 +66,7 @@ def _scene_figure(model: Reconstruction) -> go.Figure:
                 x=polyline[:, 0], y=polyline[:, 1], z=polyline[:, 2],
                 mode="lines",
                 line={"color": _CAMERA_COLOR, "width": 3},
-                name=f"view {view}",
+                name=f"vista {view}",
                 showlegend=index == 0,
                 hoverinfo="name",
             )
@@ -76,7 +76,7 @@ def _scene_figure(model: Reconstruction) -> go.Figure:
             x=trajectory[:, 0], y=trajectory[:, 1], z=trajectory[:, 2],
             mode="lines",
             line={"color": _CAMERA_COLOR, "width": 2, "dash": "dot"},
-            name="trajectory",
+            name="trayectoria",
             hoverinfo="skip",
         )
     )
@@ -102,27 +102,27 @@ def _scene_figure(model: Reconstruction) -> go.Figure:
 
 
 def _error_figure(errors: np.ndarray) -> go.Figure:
-    """Histogram of reprojection error with the median marked."""
+    """Histograma del error de reproyección con la mediana marcada."""
     figure = go.Figure(
-        go.Histogram(x=errors, nbinsx=60, marker={"color": _POINT_COLOR}, name="observations")
+        go.Histogram(x=errors, nbinsx=60, marker={"color": _POINT_COLOR}, name="observaciones")
     )
     figure.add_vline(
         x=float(np.median(errors)),
         line={"color": _CAMERA_COLOR, "dash": "dash"},
-        annotation_text=f"median {np.median(errors):.2f} px",
+        annotation_text=f"mediana {np.median(errors):.2f} px",
     )
     figure.update_layout(
         margin={"l": 40, "r": 10, "t": 30, "b": 40},
         height=260,
-        xaxis_title="reprojection error (px)",
-        yaxis_title="observations",
+        xaxis_title="error de reproyección (px)",
+        yaxis_title="observaciones",
         showlegend=False,
     )
     return figure
 
 
 def _run(views: int, points: int, noise: float, outliers: float, seed: int):
-    """Generate a scene, reconstruct it and measure the result against truth."""
+    """Genera una escena, la reconstruye y mide el resultado contra la verdad conocida."""
     scene = make_scene(
         num_points=int(points),
         num_views=int(views),
@@ -143,9 +143,9 @@ def _run(views: int, points: int, noise: float, outliers: float, seed: int):
 
     if model.num_registered < 2 or not model.points:
         message = (
-            "**The reconstruction failed.** No pair of views survived geometric "
-            "verification at these settings, so there was nothing to seed the model "
-            "with. Lower the noise or the outlier fraction."
+            "**La reconstrucción ha fallado.** Ningún par de vistas ha superado la "
+            "verificación geométrica con estos ajustes, así que no había con qué "
+            "sembrar el modelo. Baja el ruido o la fracción de outliers."
         )
         return message, None, None
 
@@ -172,51 +172,54 @@ def _run(views: int, points: int, noise: float, outliers: float, seed: int):
     errors = model.reprojection_errors()
     summary = metric_table(
         [
-            ("Views registered", f"{model.num_registered} / {len(scene.poses)}"),
-            ("Points triangulated", f"{len(model.points)}"),
-            ("Observations per point", f"{len(errors) / max(len(model.points), 1):.2f}"),
-            ("Reprojection RMSE", f"{np.sqrt((errors ** 2).mean()):.3f} px"),
-            ("Rotation error, median", f"{np.median(pose_errors.rotation_degrees):.4f}&deg;"),
-            ("Rotation error, worst", f"{pose_errors.rotation_degrees.max():.4f}&deg;"),
-            ("Camera centre error, median", f"{np.median(pose_errors.center_distance):.5f}"),
-            ("Structure error, median", f"{100 * structure_error / diameter:.3f}% of diameter"),
-            ("Wall clock", f"{elapsed:.1f} s"),
+            ("Vistas registradas", f"{model.num_registered} / {len(scene.poses)}"),
+            ("Puntos triangulados", f"{len(model.points)}"),
+            ("Observaciones por punto", f"{len(errors) / max(len(model.points), 1):.2f}"),
+            ("RMSE de reproyección", f"{np.sqrt((errors ** 2).mean()):.3f} px"),
+            ("Error de rotación, mediana", f"{np.median(pose_errors.rotation_degrees):.4f}&deg;"),
+            ("Error de rotación, peor caso", f"{pose_errors.rotation_degrees.max():.4f}&deg;"),
+            ("Error de centro, mediana", f"{np.median(pose_errors.center_distance):.5f}"),
+            (
+                "Error de estructura, mediana",
+                f"{100 * structure_error / diameter:.3f}% del diámetro",
+            ),
+            ("Tiempo de reloj", f"{elapsed:.1f} s"),
         ]
     )
     note = (
-        "\nAn RMSE close to the injected noise is the healthy outcome: it means the "
-        "estimator is reproducing the measurement error rather than absorbing it into "
-        "the model. Pose and structure errors are measured after aligning the "
-        "reconstruction to ground truth with a similarity, because a reconstruction "
-        "from images alone is only determined up to one.\n"
+        "\nQue el RMSE quede cerca del ruido inyectado es el resultado sano: significa "
+        "que el estimador reproduce el error de medida en vez de absorberlo en el "
+        "modelo. Los errores de pose y estructura se miden después de alinear la "
+        "reconstrucción con la verdad mediante una similitud, porque una "
+        "reconstrucción hecha solo con imágenes queda determinada salvo por una.\n"
     )
     return summary + "\n" + note, _scene_figure(model), _error_figure(errors)
 
 
 def build() -> None:
-    """Add the panel to the enclosing Gradio layout."""
+    """Añade el panel al layout de Gradio que lo envuelve."""
     gr.Markdown(
-        "Reconstruct a synthetic scene with known ground truth. The measurement "
-        "noise and the fraction of wrong correspondences are yours to set, which is "
-        "the point: it shows where the five-point solver, the robust estimators and "
-        "the bundle adjuster stop coping."
+        "Reconstruye una escena sintética de la que se conoce la verdad. El ruido de "
+        "medida y la fracción de correspondencias erróneas los pones tú, y ese es el "
+        "objetivo: enseñar dónde dejan de aguantar el solver de cinco puntos, los "
+        "estimadores robustos y el bundle adjustment."
     )
     with gr.Row():
         with gr.Column(scale=1):
-            views = gr.Slider(4, 20, value=12, step=1, label="Cameras")
-            points = gr.Slider(200, 1500, value=800, step=50, label="3D points")
+            views = gr.Slider(4, 20, value=12, step=1, label="Cámaras")
+            points = gr.Slider(200, 1500, value=800, step=50, label="Puntos 3D")
             noise = gr.Slider(
-                0.0, 4.0, value=0.5, step=0.1, label="Measurement noise (pixels)"
+                0.0, 4.0, value=0.5, step=0.1, label="Ruido de medida (píxeles)"
             )
             outliers = gr.Slider(
-                0.0, 0.5, value=0.10, step=0.01, label="Fraction of gross outliers"
+                0.0, 0.5, value=0.10, step=0.01, label="Fracción de outliers groseros"
             )
-            seed = gr.Slider(0, 100, value=7, step=1, label="Random seed")
-            run = gr.Button("Reconstruct", variant="primary")
+            seed = gr.Slider(0, 100, value=7, step=1, label="Semilla aleatoria")
+            run = gr.Button("Reconstruir", variant="primary")
             summary = gr.Markdown()
         with gr.Column(scale=2):
-            scene_plot = gr.Plot(label="Sparse model and cameras (drag to orbit)")
-            error_plot = gr.Plot(label="Reprojection error")
+            scene_plot = gr.Plot(label="Modelo disperso y cámaras (arrastra para orbitar)")
+            error_plot = gr.Plot(label="Error de reproyección")
 
     run.click(
         _run,

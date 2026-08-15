@@ -1,63 +1,66 @@
-# Visual Computing Projects
+# Proyectos de Computación Visual
 
-Three self-contained projects covering the path from photographs to a rendered
-3D scene, and the gradient-domain machinery that image compositing and tone
-mapping share with it. Each is a separate installable package with its own
-tests, benchmarks and documentation.
+Tres proyectos autocontenidos que cubren el camino de las fotografías a una
+escena 3D renderizada, más la maquinaria de dominio del gradiente que comparten
+la composición de imágenes y el mapeo tonal. Cada uno es un paquete instalable
+por separado con sus propios tests, benchmarks y documentación.
 
-| Project | What it does | Core technique |
+| Proyecto | Qué hace | Técnica central |
 | --- | --- | --- |
-| [structure-from-motion](structure-from-motion) | Recovers camera poses and a sparse point cloud from images | Five-point minimal solver, Schur-complement bundle adjustment |
-| [gaussian-splatting](gaussian-splatting) | Fits a 3D scene to posed images and renders novel views | EWA projection, differentiable tile rasterizer, adaptive density control |
-| [gradient-domain](gradient-domain) | Composites, flattens and tone maps images | Poisson integration with a geometric multigrid solver |
+| [structure-from-motion](structure-from-motion) | Recupera poses de cámara y una nube dispersa a partir de imágenes | Solver mínimo de cinco puntos, bundle adjustment con complemento de Schur |
+| [gaussian-splatting](gaussian-splatting) | Ajusta una escena 3D a imágenes con pose conocida y renderiza vistas nuevas | Proyección EWA, rasterizador diferenciable por tiles, control adaptativo de densidad |
+| [gradient-domain](gradient-domain) | Compone, aplana y mapea tonalmente imágenes | Integración de Poisson con un solver multigrid geométrico |
 
-An [interactive demo](interactive-demo) drives all three from the browser, with
-the sliders wired to the same library code the command line calls.
+Una [demo interactiva](interactive-demo) mueve los tres desde el navegador, con
+los sliders conectados al mismo código de librería que llama la línea de
+comandos.
 
 ```bash
 python interactive-demo/app.py
 ```
 
-The first two compose. Structure from motion writes `cameras.json` and
-`points.ply`; the splatting trainer reads exactly those and initializes from
-them, which is the same handover a production pipeline performs between a sparse
-reconstructor and a renderer.
+Los dos primeros proyectos se componen. Structure from motion escribe
+`cameras.json` y `points.ply`; el entrenador de splatting lee exactamente esos
+ficheros y se inicializa con ellos, que es el mismo relevo que hace un pipeline
+de producción entre un reconstructor disperso y un renderizador.
 
 ```bash
-sfm reconstruct photos/ --output scene/
-gsplat train --scene scene/ --images photos/ --output model/
+sfm reconstruct fotos/ --output escena/
+gsplat train --scene escena/ --images fotos/ --output modelo/
 ```
 
-That chain wants real photographs. The procedural scene bundled with the
-splatting project is a novel-view benchmark rather than a feature-matching one,
-and reconstructing it from its own renders registers only a fraction of the
-views, for [reasons that are about the images](gaussian-splatting#scope) rather
-than about the pipeline.
+Esa cadena pide fotografías reales. La escena procedural que trae el proyecto de
+splatting es un banco de pruebas de síntesis de vistas, no de emparejamiento de
+características, y reconstruirla a partir de sus propios renders solo registra
+una fracción de las vistas, por [motivos que son de las imágenes](gaussian-splatting#alcance)
+y no del pipeline.
 
-## What is implemented here rather than called
+## Qué está implementado aquí en vez de llamado
 
-The point of these projects is the algorithms, so the parts that carry the ideas
-are written out rather than delegated:
+El objeto de estos proyectos son los algoritmos, así que las partes que cargan
+con las ideas están escritas y no delegadas:
 
-* the five-point relative pose solver, including the symbolic construction of
-  the ten cubic constraints and the action-matrix eigenvalue solve;
-* sparse bundle adjustment with the Schur complement, a local `SO(3)`
-  parameterization and a robust loss;
-* the EWA projection of anisotropic 3D Gaussians and a tile-based differentiable
-  rasterizer, with activation checkpointing to bound its memory;
-* the density control that decides how many primitives a scene needs, including
-  the optimizer-state surgery that keeps Adam consistent across it;
-* a geometric multigrid V-cycle with red-black Gauss-Seidel smoothing and
-  adjoint grid transfers.
+* el solver de pose relativa de cinco puntos, incluida la construcción simbólica
+  de las diez restricciones cúbicas y la resolución por autovalores de la matriz
+  de acción;
+* bundle adjustment disperso con complemento de Schur, parametrización local en
+  `SO(3)` y pérdida robusta;
+* la proyección EWA de gaussianas 3D anisótropas y un rasterizador diferenciable
+  por tiles, con checkpointing de activaciones para acotar su memoria;
+* el control de densidad que decide cuántas primitivas necesita una escena,
+  incluida la cirugía sobre el estado del optimizador que mantiene a Adam
+  coherente al hacerlo;
+* un ciclo V multigrid geométrico con suavizado Gauss-Seidel rojo-negro y
+  transferencias de malla adjuntas.
 
-Third-party code is used where it is not the subject: OpenCV for image decoding
-and SIFT description, SciPy for sparse factorization and transforms, PyTorch for
-automatic differentiation and array operations.
+Se usa código de terceros donde no es el objeto de estudio: OpenCV para decodificar
+imágenes y describir con SIFT, SciPy para factorización dispersa y transformadas,
+PyTorch para diferenciación automática y operaciones sobre arrays.
 
-## Running everything
+## Cómo correrlo todo
 
-Each project installs independently and needs no downloaded data; every
-demonstration generates its own inputs.
+Cada proyecto se instala de forma independiente y no necesita descargar datos;
+todas las demostraciones generan sus propias entradas.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -67,37 +70,46 @@ pip install -e gaussian-splatting   && gsplat train --scene synthetic --output o
 pip install -e gradient-domain      && gradient-domain demo --output out/gradient
 ```
 
-Tests, per project:
+Los tests, por proyecto:
 
 ```bash
 cd structure-from-motion && pytest -q
 ```
 
-## Results at a glance
+## Resultados de un vistazo
 
-**Structure from motion.** Twelve views of an 800-point scene, half a pixel of
-measurement noise and 15 percent gross outliers: every view registered, median
-rotation error 0.007 degrees, structure error 0.04 percent of the scene
-diameter. [Details](structure-from-motion#accuracy-on-the-synthetic-benchmark)
+**Structure from motion.** Doce vistas de una escena de 800 puntos, medio píxel
+de ruido de medida y un 15 % de outliers groseros: todas las vistas registradas,
+error de rotación mediano de 0.007 grados, error de estructura del 0.04 % del
+diámetro de la escena.
+[Detalles](structure-from-motion#precisión-en-el-banco-de-pruebas-sintético)
 
-**Gradient domain.** At one megapixel, conjugate gradients needs 1 866
-iterations to reach a relative residual of `1e-8` and multigrid-preconditioned
-CG needs 7, a factor of 53 in wall-clock time.
-[Details](gradient-domain#scaling)
+**Dominio del gradiente.** A un megapíxel, el gradiente conjugado necesita 1866
+iteraciones para llegar a un residuo relativo de `1e-8` y el gradiente conjugado
+precondicionado con multigrid necesita 7, un factor de 53 en tiempo de reloj.
+[Detalles](gradient-domain#escalado)
 
-**Gaussian splatting.** Forty views of a ray-traced scene at 200 x 150, starting
-from ten thousand randomly placed primitives and no point cloud: 24.23 dB and
-0.907 SSIM on held-out views, half a decibel below the training views.
-[Details](gaussian-splatting#results)
+**Gaussian splatting.** Cuarenta vistas de una escena trazada por rayos a
+200 x 150, partiendo de diez mil primitivas colocadas al azar y sin nube de
+puntos: 24.23 dB y 0.907 de SSIM en vistas retenidas, medio decibelio por debajo
+de las de entrenamiento. [Detalles](gaussian-splatting#resultados)
 
-## Conventions shared across the projects
+## Convenios compartidos entre los proyectos
 
-Cameras are world-to-camera, `x_camera = R x_world + t`, with the optical axis
-along `+z` and `+y` pointing down in the image; this matches OpenCV and COLMAP,
-so poses move between the projects without a change of basis. Images are float
-arrays in `[0, 1]` with channels last. Every randomized routine takes a seed and
-is reproducible.
+Las cámaras van de mundo a cámara, `x_camera = R x_world + t`, con el eje óptico
+en `+z` y `+y` apuntando hacia abajo en la imagen; esto coincide con OpenCV y
+COLMAP, así que las poses viajan entre proyectos sin cambio de base. Las imágenes
+son arrays en coma flotante en `[0, 1]` con los canales al final. Toda rutina
+aleatoria acepta una semilla y es reproducible.
 
-## Licence
+## Nota sobre el idioma
 
-MIT. See [LICENSE](LICENSE).
+La documentación, los comentarios y la interfaz están en español. Los
+identificadores del código (funciones, clases, variables) y los encabezados de
+sección de los docstrings se mantienen en inglés, que es el convenio habitual y
+lo que preserva la correspondencia con la literatura: `essential matrix`,
+`bundle adjustment`, `multigrid`.
+
+## Licencia
+
+MIT. Ver [LICENSE](LICENSE).

@@ -1,61 +1,62 @@
 # Structure from Motion
 
-Incremental structure from motion for calibrated cameras, written on top of NumPy
-and SciPy. The geometry is implemented from first principles: the minimal
-essential-matrix solver, triangulation, absolute pose estimation, track
-construction and the bundle adjuster are all in this repository. OpenCV is used
-only for image decoding and SIFT description.
+Structure from motion incremental para cámaras calibradas, escrito sobre NumPy y
+SciPy. La geometría está implementada desde cero: el solver mínimo de la matriz
+esencial, la triangulación, la estimación de pose absoluta, la construcción de
+tracks y el bundle adjuster están todos en este repositorio. OpenCV se usa solo
+para decodificar imágenes y describir con SIFT.
 
-![Reconstruction of the synthetic benchmark scene](docs/synthetic_demo.png)
+![Reconstrucción de la escena sintética de referencia](docs/synthetic_demo.png)
 
-## Pipeline
+## El pipeline
 
-| Stage | Module | Method |
+| Etapa | Módulo | Método |
 | --- | --- | --- |
-| Detection and description | [features.py](src/sfm/features.py) | SIFT, L2-normalized descriptors |
-| Matching | [features.py](src/sfm/features.py) | Blocked brute force, Lowe ratio test, mutual consistency |
-| Two-view geometry | [five_point.py](src/sfm/five_point.py), [epipolar.py](src/sfm/epipolar.py) | Five-point essential solver inside MSAC with local optimization |
-| Track building | [tracks.py](src/sfm/tracks.py) | Union-find over verified matches, conflicting components rejected |
-| Triangulation | [triangulation.py](src/sfm/triangulation.py) | Multi-view DLT followed by Gauss-Newton refinement |
-| Registration | [pnp.py](src/sfm/pnp.py) | Normalized DLT inside RANSAC, then robust Levenberg-Marquardt |
-| Refinement | [bundle.py](src/sfm/bundle.py) | Sparse Levenberg-Marquardt with the Schur complement and a Huber loss |
-| Orchestration | [reconstruction.py](src/sfm/reconstruction.py) | Seed pair, incremental registration, interleaved local and global refinement |
+| Detección y descripción | [features.py](src/sfm/features.py) | SIFT, descriptores normalizados en L2 |
+| Emparejamiento | [features.py](src/sfm/features.py) | Fuerza bruta por bloques, test de razón de Lowe, consistencia mutua |
+| Geometría de dos vistas | [five_point.py](src/sfm/five_point.py), [epipolar.py](src/sfm/epipolar.py) | Solver esencial de cinco puntos dentro de MSAC con optimización local |
+| Construcción de tracks | [tracks.py](src/sfm/tracks.py) | Union-find sobre los emparejamientos verificados, descartando componentes en conflicto |
+| Triangulación | [triangulation.py](src/sfm/triangulation.py) | DLT multivista seguido de refinamiento Gauss-Newton |
+| Registro | [pnp.py](src/sfm/pnp.py) | DLT normalizado dentro de RANSAC y luego Levenberg-Marquardt robusto |
+| Refinamiento | [bundle.py](src/sfm/bundle.py) | Levenberg-Marquardt disperso con complemento de Schur y pérdida de Huber |
+| Orquestación | [reconstruction.py](src/sfm/reconstruction.py) | Par semilla, registro incremental, refinamiento local y global intercalados |
 
-## Implementation notes
+## Notas de implementación
 
-### Five-point minimal solver
+### Solver mínimo de cinco puntos
 
-Five correspondences between calibrated views leave a four-dimensional null space
-of the epipolar constraint, so the essential matrix is written as
-`E = x E1 + y E2 + z E3 + E4`. Substituting that into the two algebraic
-properties of an essential matrix,
+Cinco correspondencias entre vistas calibradas dejan un espacio nulo de dimensión
+cuatro de la restricción epipolar, así que la matriz esencial se escribe como
+`E = x E1 + y E2 + z E3 + E4`. Sustituyendo eso en las dos propiedades algebraicas
+de una matriz esencial,
 
 ```
-det(E) = 0        2 E Eᵀ E − trace(E Eᵀ) E = 0
+det(E) = 0        2 E Eᵀ E − traza(E Eᵀ) E = 0
 ```
 
-produces ten cubic polynomials in three unknowns. Expressed in the twenty
-monomials of degree at most three, the system is a `10 × 20` matrix whose leading
-`10 × 10` block is generically invertible. Eliminating it writes every cubic
-monomial in the quotient-ring basis `{x², xy, y², xz, yz, z², x, y, z, 1}`, which
-is exactly what is needed to build the matrix of multiplication by `x` in the
-quotient ring; its eigenvectors are the basis monomials evaluated at the
-solutions.
+salen diez polinomios cúbicos en tres incógnitas. Expresado en los veinte
+monomios de grado como mucho tres, el sistema es una matriz `10 × 20` cuyo bloque
+principal `10 × 10` es genéricamente invertible. Eliminarlo escribe cada monomio
+cúbico en la base del anillo cociente `{x², xy, y², xz, yz, z², x, y, z, 1}`, que
+es justo lo que hace falta para construir la matriz de multiplicación por `x` en
+ese anillo; sus autovectores son los monomios de la base evaluados en las
+soluciones.
 
-The polynomial system is assembled symbolically at run time from the null-space
-basis rather than from hard-coded coefficient tables, so the construction can be
-read and checked against the derivation. The tests verify that every returned
-matrix has singular values `(σ, σ, 0)`, satisfies the epipolar constraint to
-machine precision, and that the ground-truth matrix is among the solutions.
+El sistema polinómico se monta simbólicamente en tiempo de ejecución a partir de
+la base del espacio nulo, en lugar de partir de tablas de coeficientes escritas a
+mano, de modo que la construcción se puede leer y contrastar con la derivación.
+Los tests verifican que toda matriz devuelta tiene valores singulares `(σ, σ, 0)`,
+que satisface la restricción epipolar hasta precisión de máquina, y que la matriz
+verdadera está entre las soluciones.
 
-Compared with the eight-point algorithm this halves the RANSAC sample. At a
-50 percent inlier ratio the expected number of hypotheses drops by roughly two
-orders of magnitude, and the essential constraints are enforced exactly instead
-of being restored by projecting a general matrix afterwards.
+Frente al algoritmo de ocho puntos esto reduce a la mitad la muestra de RANSAC.
+Con un 50 % de inliers el número esperado de hipótesis cae unos dos órdenes de
+magnitud, y las restricciones de matriz esencial se imponen de forma exacta en
+vez de restaurarse proyectando después una matriz general.
 
 ### Bundle adjustment
 
-The normal equations of a reconstruction have the block structure
+Las ecuaciones normales de una reconstrucción tienen la estructura por bloques
 
 ```
 | U   W | | δ_c |   | g_c |
@@ -63,53 +64,57 @@ The normal equations of a reconstruction have the block structure
 | Wᵀ  V | | δ_p |   | g_p |
 ```
 
-with one `6 × 6` block per camera in `U`, one `3 × 3` block per point in `V`, and
-one `6 × 3` block per observation in `W`. Since `V` is block diagonal it inverts
-in closed form, and eliminating the points gives the reduced camera system
-`(U − W V⁻¹ Wᵀ) δ_c = g_c − W V⁻¹ g_p`, whose size depends only on the number of
-views. That is what makes the step affordable: for a few hundred cameras and a
-hundred thousand points the dense system is out of reach, while the reduced one
-is a sparse solve with a few thousand unknowns.
+con un bloque `6 × 6` por cámara en `U`, uno `3 × 3` por punto en `V` y uno
+`6 × 3` por observación en `W`. Como `V` es diagonal por bloques se invierte en
+forma cerrada, y eliminar los puntos da el sistema reducido de cámaras
+`(U − W V⁻¹ Wᵀ) δ_c = g_c − W V⁻¹ g_p`, cuyo tamaño solo depende del número de
+vistas. Eso es lo que hace el paso asequible: para unos cientos de cámaras y cien
+mil puntos el sistema denso queda fuera de alcance mientras que el reducido es
+una resolución dispersa de unos pocos miles de incógnitas.
 
-Three details matter in practice.
+Tres detalles importan en la práctica.
 
-* Rotations are updated multiplicatively, `R ← exp(skew(δ)) R`. The increment is
-  a local chart around the current estimate, so the Jacobian of a rotated point
-  is the cross-product matrix `−skew(R X)` and no chart singularity is ever
-  approached. The Jacobian is checked against central differences in the tests.
-* Residuals are reweighted with a Huber loss, so surviving mismatches bend the
-  solution by a bounded amount. Turning the loss off measurably degrades the
-  poses on contaminated data, which the tests assert.
-* A free reconstruction has seven gauge degrees of freedom. Holding one pose
-  constant removes six of them; the remaining scale freedom is absorbed by the
-  Levenberg-Marquardt damping, which keeps the reduced system positive definite.
-  Structure therefore has to be aligned by a similarity before it is compared
-  against ground truth.
+* Las rotaciones se actualizan multiplicativamente, `R ← exp(skew(δ)) R`. El
+  incremento es una carta local alrededor de la estimación actual, así que el
+  jacobiano de un punto rotado es la matriz de producto vectorial `−skew(R X)` y
+  nunca se roza una singularidad de la carta. El jacobiano se contrasta con
+  diferencias centradas en los tests.
+* Los residuos se reponderan con una pérdida de Huber, de modo que los
+  emparejamientos erróneos que sobreviven doblan la solución una cantidad
+  acotada. Apagar la pérdida degrada las poses de forma medible sobre datos
+  contaminados, y los tests lo comprueban.
+* Una reconstrucción libre tiene siete grados de libertad de gauge. Fijar una
+  pose elimina seis; la libertad de escala que queda la absorbe el
+  amortiguamiento de Levenberg-Marquardt, que mantiene el sistema reducido
+  definido positivo. Por eso la estructura hay que alinearla con una similitud
+  antes de compararla con la verdad.
 
-The solver is validated against `scipy.optimize.least_squares` running
-trust-region reflective on the same problem with a numerically differentiated
-sparse Jacobian. The two final costs have to agree within two percent.
+El solver se valida contra `scipy.optimize.least_squares` corriendo
+trust-region reflective sobre el mismo problema con un jacobiano disperso
+diferenciado numéricamente. Los dos costes finales tienen que coincidir dentro
+del dos por ciento.
 
-### Robust estimation
+### Estimación robusta
 
-[ransac.py](src/sfm/ransac.py) is model agnostic: callers supply a minimal
-solver and a residual function. It scores hypotheses with the truncated squared
-error of MSAC rather than a raw inlier count, so two models with the same inlier
-set are still ranked by how well they explain it, and it re-fits on the inlier
-set whenever the best score improves. That local optimization step is what makes
-a minimal sample competitive with a non-minimal fit, and by enlarging the inlier
-set it also tightens the adaptive iteration bound.
+[ransac.py](src/sfm/ransac.py) es agnóstico al modelo: quien lo llama aporta un
+solver mínimo y una función de residuos. Puntúa las hipótesis con el error
+cuadrático truncado de MSAC en vez de con un conteo crudo de inliers, así que dos
+modelos con el mismo conjunto de inliers se siguen ordenando por lo bien que lo
+explican, y reajusta sobre el conjunto de inliers cada vez que mejora la mejor
+puntuación. Ese paso de optimización local es lo que hace competitiva a una
+muestra mínima frente a un ajuste no mínimo, y al agrandar el conjunto de inliers
+también aprieta la cota adaptativa de iteraciones.
 
-## Accuracy on the synthetic benchmark
+## Precisión en el banco de pruebas sintético
 
-Twelve cameras on a 90 degree arc observe 800 points spread over three
-orthogonal walls. Isotropic Gaussian noise is added to every projection and a
-fraction of the observations is displaced by a gross error with a standard
-deviation of 40 pixels. Structure and pose errors are measured after aligning
-the reconstruction to ground truth with a similarity transform; the scene is
-about 6 units across.
+Doce cámaras sobre un arco de 90 grados observan 800 puntos repartidos en tres
+paredes ortogonales. A cada proyección se le añade ruido gaussiano isótropo y a
+una fracción de las observaciones se le añade un error grosero con desviación
+típica de 40 píxeles. Los errores de estructura y pose se miden tras alinear la
+reconstrucción con la verdad mediante una similitud; la escena mide unas 6
+unidades de lado a lado.
 
-| Noise (px) | Outliers | Views | Points | RMSE (px) | Rotation, median (deg) | Centre, median | Structure, median |
+| Ruido (px) | Outliers | Vistas | Puntos | RMSE (px) | Rotación, mediana (grados) | Centro, mediana | Estructura, mediana |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 0.0 | 0 % | 12/12 | 724 | 0.000 | 0.0000 | 0.00000 | 0.00000 |
 | 0.0 | 15 % | 12/12 | 676 | 0.075 | 0.0043 | 0.00015 | 0.00045 |
@@ -120,86 +125,90 @@ about 6 units across.
 | 1.5 | 0 % | 12/12 | 547 | 1.869 | 0.0745 | 0.00340 | 0.00930 |
 | 1.5 | 15 % | 12/12 | 538 | 1.828 | 0.0867 | 0.00312 | 0.01126 |
 
-Reproduce a row with
+Para reproducir una fila:
 
 ```bash
 sfm demo --views 12 --points 800 --noise 0.5 --outliers 0.15 --seed 5
 ```
 
-Two observations. The residual RMSE tracks the injected noise almost exactly,
-which is the signature of an estimator that is not absorbing measurement noise
-into the model. Adding outliers lowers the point count, because contaminated
-matches destroy the tracks they touch, but it barely moves the pose error: that
-is the robust loss and the geometric verification doing their job.
+Dos observaciones. El RMSE residual sigue casi exactamente al ruido inyectado,
+que es la firma de un estimador que no está absorbiendo el ruido de medida
+dentro del modelo. Añadir outliers baja el número de puntos, porque los
+emparejamientos contaminados destruyen los tracks que tocan, pero apenas mueve el
+error de pose: eso son la pérdida robusta y la verificación geométrica haciendo
+su trabajo.
 
-## Usage
+## Uso
 
 ```bash
 pip install -e structure-from-motion
 ```
 
-Reconstruct a folder of images:
+Reconstruir una carpeta de imágenes:
 
 ```bash
-sfm reconstruct path/to/images --output out/ --fov 62
+sfm reconstruct ruta/a/imagenes --output out/ --fov 62
 ```
 
-The output directory receives `points.ply`, a `cameras.json` with the calibrated
-poses, and a summary figure. Both files are consumed directly by the
-[Gaussian splatting](../gaussian-splatting) project in this repository, which is
-the same handover a real pipeline performs between a sparse reconstructor and a
-renderer.
+El directorio de salida recibe `points.ply`, un `cameras.json` con las poses
+calibradas y una figura resumen. Los dos ficheros los consume directamente el
+proyecto de [Gaussian splatting](../gaussian-splatting) de este repositorio, que
+es el mismo relevo que hace un pipeline real entre un reconstructor disperso y un
+renderizador.
 
-Without `--fov` the focal length is guessed from a 55 degree horizontal field of
-view. That is enough to get a reconstruction started on casual captures, but
-bundle adjustment holds intrinsics fixed, so a badly wrong guess shows up as
-systematic error that no amount of optimization removes.
+Sin `--fov` la distancia focal se adivina a partir de un campo de visión
+horizontal de 55 grados. Eso basta para arrancar una reconstrucción de capturas
+informales, pero el bundle adjustment mantiene los intrínsecos fijos, así que una
+suposición muy equivocada aparece como error sistemático que ninguna cantidad de
+optimización elimina.
 
-Run the synthetic benchmark instead, which needs no input data:
+Correr en su lugar el banco de pruebas sintético, que no necesita datos de
+entrada:
 
 ```bash
 sfm demo --views 12 --points 800 --output out/
 ```
 
-## Layout
+## Estructura
 
 ```
 src/sfm/
-  rotations.py       SO(3) exponential and logarithm, local Jacobians
-  camera.py          pinhole intrinsics, rigid poses, projection
-  ransac.py          model-agnostic MSAC with local optimization
-  five_point.py      minimal essential-matrix solver
-  epipolar.py        eight-point solver, Sampson error, pose recovery
-  triangulation.py   linear and nonlinear triangulation
-  pnp.py             normalized DLT pose, robust refinement
-  tracks.py          union-find feature tracks
-  bundle.py          sparse Levenberg-Marquardt with the Schur complement
-  reconstruction.py  the incremental loop
-  metrics.py         similarity alignment and pose error metrics
-  io.py              PLY and camera serialization
-  synthetic.py       ground-truth scene generator
-  visualize.py       result figures
-  cli.py             command line interface
-tests/               47 tests, roughly three seconds
+  rotations.py       exponencial y logaritmo en SO(3), jacobianos locales
+  camera.py          intrínsecos de pinhole, poses rígidas, proyección
+  ransac.py          MSAC agnóstico al modelo con optimización local
+  five_point.py      solver mínimo de la matriz esencial
+  epipolar.py        solver de ocho puntos, error de Sampson, recuperación de pose
+  triangulation.py   triangulación lineal y no lineal
+  pnp.py             pose por DLT normalizado, refinamiento robusto
+  tracks.py          tracks de características con union-find
+  bundle.py          Levenberg-Marquardt disperso con complemento de Schur
+  reconstruction.py  el bucle incremental
+  metrics.py         alineamiento por similitud y métricas de error de pose
+  io.py              serialización de PLY y cámaras
+  synthetic.py       generador de escenas con verdad conocida
+  visualize.py       figuras de resultados
+  cli.py             interfaz de línea de comandos
+tests/               47 tests, unos tres segundos
 ```
 
-## Scope
+## Alcance
 
-Intrinsics are fixed during optimization, so lens distortion has to be removed
-beforehand and the focal length has to be known or guessed well. Matching is
-exhaustive and therefore quadratic in the number of images, which is the right
-choice up to a few dozen views and the wrong one beyond that; larger collections
-need an image-retrieval step to shortlist pairs. Registration uses a six-point
-DLT rather than a three-point solver, which costs RANSAC iterations but is not
-the bottleneck at the inlier ratios that verified tracks produce.
+Los intrínsecos quedan fijos durante la optimización, así que la distorsión de
+lente hay que quitarla antes y la distancia focal hay que conocerla o adivinarla
+bien. El emparejamiento es exhaustivo y por tanto cuadrático en el número de
+imágenes, que es la elección correcta hasta unas pocas docenas de vistas y la
+equivocada más allá; colecciones mayores necesitan una etapa de recuperación de
+imágenes que preseleccione pares. El registro usa un DLT de seis puntos en lugar
+de un solver de tres, lo que cuesta iteraciones de RANSAC pero no es el cuello de
+botella con las tasas de inliers que producen los tracks verificados.
 
-## References
+## Referencias
 
 * Nistér, *An Efficient Solution to the Five-Point Relative Pose Problem*, PAMI 2004.
-* Stewénius, Engels and Nistér, *Recent Developments on Direct Relative Orientation*, ISPRS 2006.
+* Stewénius, Engels y Nistér, *Recent Developments on Direct Relative Orientation*, ISPRS 2006.
 * Hartley, *In Defense of the Eight-Point Algorithm*, PAMI 1997.
-* Hartley and Zisserman, *Multiple View Geometry in Computer Vision*, 2nd edition, 2004.
-* Triggs, McLauchlan, Hartley and Fitzgibbon, *Bundle Adjustment: A Modern Synthesis*, 1999.
-* Chum, Matas and Kittler, *Locally Optimized RANSAC*, DAGM 2003.
-* Torr and Zisserman, *MLESAC: A New Robust Estimator*, CVIU 2000.
-* Schönberger and Frahm, *Structure-from-Motion Revisited*, CVPR 2016.
+* Hartley y Zisserman, *Multiple View Geometry in Computer Vision*, 2ª edición, 2004.
+* Triggs, McLauchlan, Hartley y Fitzgibbon, *Bundle Adjustment: A Modern Synthesis*, 1999.
+* Chum, Matas y Kittler, *Locally Optimized RANSAC*, DAGM 2003.
+* Torr y Zisserman, *MLESAC: A New Robust Estimator*, CVIU 2000.
+* Schönberger y Frahm, *Structure-from-Motion Revisited*, CVPR 2016.
